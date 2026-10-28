@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdminForApp(appId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/artifacts/$(appId)/public/data/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/artifacts/$(appId)/public/data/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwnUserDoc(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /artifacts/{appId}/public/data/users/{uid} {
+      allow create: if isOwnUserDoc(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['admin', 'campaign_manager']
+        && request.resource.data.createdAt is timestamp;
+
+      allow read: if isOwnUserDoc(uid) || isAdminForApp(appId);
+
+      allow update: if (isOwnUserDoc(uid) && request.resource.data.uid == uid)
+        || isAdminForApp(appId);
+
+      allow delete: if isAdminForApp(appId);
+    }
+
+    match /artifacts/{appId}/public/data/methodology/{docId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdminForApp(appId);
+    }
+  }
+}

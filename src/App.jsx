@@ -493,13 +493,10 @@ Vanguard Assurance`);
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-base font-extrabold tracking-tight sm:text-lg">TILTE</span>
-                <span className="rounded-full border border-[#741532] bg-[#741532]/30 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[#BFC9CE]">
-                  Email Campaign Readiness Studio
-                </span>
+                <span className="text-base font-extrabold tracking-tight sm:text-lg">Tilte</span>
               </div>
               <p className={`hidden text-[11px] sm:block ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                2027 In-Box Deliverability, AI Summaries & Creative Governance
+                Email Campaign Readiness Studio
               </p>
             </div>
           </div>
@@ -547,11 +544,6 @@ Vanguard Assurance`);
             </nav>
 
             <div className="flex items-center space-x-2 pl-1">
-              <div className={`flex items-center space-x-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold ${userRole === 'admin' ? 'border-[#FF002D] bg-[#741532] text-white' : darkMode ? 'border-[#405E69] bg-[#002837] text-[#80949B]' : 'border-[#BFC9CE] bg-white text-slate-700'}`}>
-                {userRole === 'admin' ? <ShieldAlert className="h-3 w-3 text-[#FF002D]" /> : <User className="h-3 w-3" />}
-                <span className="uppercase">{userRole}</span>
-              </div>
-
               {user && !user.isAnonymous ? (
                 <div className="flex items-center space-x-1.5">
                   <span className={`hidden max-w-[110px] truncate text-[11px] md:inline ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>

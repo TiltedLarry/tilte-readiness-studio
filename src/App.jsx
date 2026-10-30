@@ -85,7 +85,7 @@ export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('studio');
   const [user, setUser] = useState(null);
-  const [userRole, setUserRole] = useState('campaign_manager');
+  const [userProfile, setUserProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -118,7 +118,7 @@ export default function App() {
   const [creativeAuditRun, setCreativeAuditRun] = useState(false);
   const [creativeFindings, setCreativeFindings] = useState(null);
 
-  const isCurrentUserAdmin = userRole === 'admin' || (user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+  const isCurrentUserAdmin = Boolean(userProfile?.role === 'admin' || user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -138,20 +138,20 @@ export default function App() {
             createdAt: serverTimestamp(),
           };
           await setDoc(userDocRef, initialData);
-          setUserRole(initialData.role);
+          setUserProfile(initialData);
         } else {
           const userData = snap.data();
           if (isSuperAdmin && userData.role !== 'admin') {
             await updateDoc(userDocRef, { role: 'admin', isSuperAdmin: true });
-            setUserRole('admin');
+            setUserProfile({ ...userData, role: 'admin', isSuperAdmin: true });
           } else {
-            setUserRole(userData.role || 'campaign_manager');
+            setUserProfile({ ...userData, role: userData.role || 'campaign_manager' });
           }
         }
         setUser(currentUser);
       } else {
         setUser(null);
-        setUserRole('campaign_manager');
+        setUserProfile(null);
       }
       setAuthLoading(false);
     });
@@ -160,37 +160,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-
-    const methodologyDocRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'methodology', 'global_rules_2027');
-
-    const unsubscribe = onSnapshot(
-      methodologyDocRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.rules && Array.isArray(data.rules) && data.rules.length > 0) {
-            setRules(data.rules);
-          }
-          if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
-            setSources(data.sources);
-            if (!selectedSource) setSelectedSource(data.sources[0]);
-          }
-        } else {
-          setDoc(methodologyDocRef, {
-            rules: DEFAULT_RULES,
-            sources: DEFAULT_SOURCES,
-            lastUpdated: new Date().toISOString(),
-            updatedBy: user.email || 'system',
-          }).catch((err) => console.warn('Could not auto-seed methodology doc:', err));
-        }
-      },
-      (error) => {
-        console.error('Firestore Methodology Snapshot Error:', error);
-      },
-    );
-
-    return () => unsubscribe();
+    if (user) {
+      setShowAuthModal(false);
+      setAuthMode('login');
+      setAuthError('');
+      setActiveTab('studio');
+    }
   }, [user]);
 
   const saveMethodologyToFirestore = async (updatedRules, updatedSources) => {
@@ -315,7 +290,7 @@ export default function App() {
         const cred = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
         const userDocRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', cred.user.uid);
         const defaultRole = cred.user.email && (cred.user.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() || cred.user.email.endsWith('@tilte.com')) ? 'admin' : 'campaign_manager';
-        await setDoc(userDocRef, {
+        const profile = {
           uid: cred.user.uid,
           email: cred.user.email,
           displayName: cred.user.displayName || cred.user.email.split('@')[0],
@@ -323,8 +298,9 @@ export default function App() {
           role: defaultRole,
           isSuperAdmin: cred.user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase(),
           createdAt: serverTimestamp(),
-        });
-        setUserRole(defaultRole);
+        };
+        await setDoc(userDocRef, profile);
+        setUserProfile(profile);
       }
       setShowAuthModal(false);
       setAuthEmail('');
@@ -343,7 +319,7 @@ export default function App() {
       const snap = await getDoc(userDocRef);
       if (!snap.exists()) {
         const defaultRole = cred.user.email && (cred.user.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() || cred.user.email.endsWith('@tilte.com')) ? 'admin' : 'campaign_manager';
-        await setDoc(userDocRef, {
+        const profile = {
           uid: cred.user.uid,
           email: cred.user.email,
           displayName: cred.user.displayName || cred.user.email.split('@')[0],
@@ -351,8 +327,11 @@ export default function App() {
           role: defaultRole,
           isSuperAdmin: cred.user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase(),
           createdAt: serverTimestamp(),
-        });
-        setUserRole(defaultRole);
+        };
+        await setDoc(userDocRef, profile);
+        setUserProfile(profile);
+      } else {
+        setUserProfile({ ...snap.data(), role: snap.data().role || 'campaign_manager' });
       }
       setShowAuthModal(false);
     } catch (err) {
@@ -362,7 +341,7 @@ export default function App() {
 
   const handleSignOut = async () => {
     await signOut(auth);
-    setUserRole('campaign_manager');
+    setUserProfile(null);
   };
 
   const toggleTheme = () => {
@@ -374,37 +353,6 @@ export default function App() {
       ...current,
       [pillarIndex]: !current[pillarIndex],
     }));
-  };
-
-  const handleLoadSampleTemplate = () => {
-    setClientName('Vanguard Assurance');
-    setCampaignName('Q1 Renewal Schedule');
-    setTargetAudience('Premium policyholders');
-    setCoreGoal('Confirm renewal before 28 February');
-    setSubjectLine('Your policy renews on 1 March: action required');
-    setPreHeader('Review your updated premium and confirm your renewal before the deadline.');
-    setEmailCopy(`Dear Client,
-
-Please review your updated premium and confirm renewal before 28 February.
-
-Your policy cover remains active until 1 March, but your premium requires confirmation to avoid a lapse in cover.
-
-[Confirm Renewal]
-
-Thank you,
-Vanguard Assurance`);
-    setHasCalculated(false);
-    setAuditResults(null);
-  };
-
-  const handleBriefFile = (event) => {
-    const file = event.target.files?.[0];
-    if (file) setBriefFileName(file.name);
-  };
-
-  const handleCopyFile = (event) => {
-    const file = event.target.files?.[0];
-    if (file) setCopyFileName(file.name);
   };
 
   const handleDesignFile = (event) => {
@@ -527,10 +475,7 @@ Vanguard Assurance`);
                 className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 transition-all ${activeTab === 'methodology' ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
               >
                 <BookOpen className="h-3.5 w-3.5" />
-                <span className="flex items-center space-x-1">
-                  <span>Current Methodologies</span>
-                  {userRole === 'admin' ? <span className="h-1.5 w-1.5 rounded-full bg-[#FF002D]" title="Admin Edit Rights Active" /> : null}
-                </span>
+                <span>Current Methodologies</span>
               </button>
 
               <button
@@ -544,6 +489,17 @@ Vanguard Assurance`);
             </nav>
 
             <div className="flex items-center space-x-2 pl-1">
+              {isCurrentUserAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => setIsTeamModalOpen(true)}
+                  className="flex items-center space-x-1.5 rounded-lg border border-[#FF002D]/60 bg-[#741532]/20 px-2.5 py-1 text-[11px] font-bold text-[#FF002D] transition-all hover:bg-[#741532]/40"
+                >
+                  <ShieldCheck className="h-3 w-3" />
+                  <span>Team Access</span>
+                </button>
+              ) : null}
+
               {user && !user.isAnonymous ? (
                 <div className="flex items-center space-x-1.5">
                   <span className={`hidden max-w-[110px] truncate text-[11px] md:inline ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
@@ -1055,9 +1011,6 @@ Vanguard Assurance`);
                 <div className="flex items-center space-x-2">
                   <BookOpen className="h-5 w-5 text-[#80949B]" />
                   <h2 className="text-lg font-black tracking-tight">Current Methodologies & Knowledge Base</h2>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${userRole === 'admin' ? 'border-[#FF002D] bg-[#741532]/40 text-rose-300' : 'border-[#405E69] bg-[#405E69]/30 text-[#BFC9CE]'}`}>
-                    {userRole === 'admin' ? 'Editing Enabled' : 'View Only'}
-                  </span>
                 </div>
                 <p className={`mt-0.5 text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                   NotebookLM-style split workspace. Global methodology updates are synchronized in Firestore.
@@ -1065,7 +1018,7 @@ Vanguard Assurance`);
               </div>
 
               <div className="flex items-center space-x-2 self-start md:self-auto">
-                {userRole === 'admin' ? (
+                {isCurrentUserAdmin ? (
                   <>
                     <button type="button" onClick={handleResetToDefaultMethodology} title="Reset rules to 2027 baseline" className={`rounded-xl border p-2 text-xs font-semibold transition-all ${darkMode ? 'border-[#405E69] text-[#80949B] hover:text-white' : 'border-[#BFC9CE] text-slate-600 hover:text-slate-900'}`}>
                       <RotateCcw className="h-4 w-4" />
@@ -1126,7 +1079,7 @@ Vanguard Assurance`);
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Active Criteria & Scoring Weight Rules ({rules.length})</h3>
                   <div className="flex items-center space-x-3">
                     <span className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Total Max Weight: {rules.reduce((acc, r) => acc + r.weight, 0)} pts</span>
-                    {userRole === 'admin' && <span className="text-[10px] font-mono font-bold text-[#FF002D]">• Cloud-Synced</span>}
+                    {isCurrentUserAdmin && <span className="text-[10px] font-mono font-bold text-[#FF002D]">• Cloud-Synced</span>}
                   </div>
                 </div>
 
@@ -1146,7 +1099,7 @@ Vanguard Assurance`);
 
                       <div className="flex shrink-0 items-center space-x-3">
                         <span className="rounded border border-[#741532] bg-[#741532]/30 px-2 py-1 font-mono text-xs font-bold text-[#BFC9CE]">{rule.weight} pts</span>
-                        {userRole === 'admin' ? (
+                        {isCurrentUserAdmin ? (
                           <button type="button" onClick={() => handleDeleteRule(rule.id)} className="p-1 text-[#80949B] transition-colors hover:text-[#FF002D]" title="Remove rule (Admin)">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1157,10 +1110,60 @@ Vanguard Assurance`);
                     </div>
                   ))}
                 </div>
+
+                <div className={`space-y-2 rounded-xl border p-4 text-xs ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <span className="block text-[10px] font-bold uppercase text-[#80949B]">Selected Source Detail</span>
+                  <h4 className="font-bold">{selectedSource.title}</h4>
+                  <p className={`leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-600'}`}>{selectedSource.snippet}</p>
+                </div>
+              </div>
+
+              <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-8 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+                <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Active Criteria & Scoring Weight Rules ({rules.length})</h3>
+                  <div className="flex items-center space-x-3">
+                    <span className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Total Max Weight: {rules.reduce((acc, r) => acc + r.weight, 0)} pts</span>
+                    {isCurrentUserAdmin && <span className="text-[10px] font-mono font-bold text-[#FF002D]">• Cloud-Synced</span>}
+                  </div>
+                </div>
+
+                <div className="space-y-2.5">
+                  {rules.map((rule) => (
+                    <div key={rule.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-xs transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] hover:border-[#80949B]' : 'border-[#BFC9CE] bg-white hover:border-slate-400'}`}>
+                      <div className="flex items-center space-x-3">
+                        <span className="rounded bg-[#405E69] px-2 py-1 text-xs font-black text-white">{rule.code}</span>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-bold">{rule.title}</h4>
+                            <span className="rounded-full bg-[#405E69]/30 px-2 py-0.5 text-[10px] text-[#BFC9CE]">{rule.pillar}</span>
+                          </div>
+                          <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{rule.desc}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 items-center space-x-3">
+                        <span className="rounded border border-[#741532] bg-[#741532]/30 px-2 py-1 font-mono text-xs font-bold text-[#BFC9CE]">{rule.weight} pts</span>
+                        {isCurrentUserAdmin ? (
+                          <button type="button" onClick={() => handleDeleteRule(rule.id)} className="p-1 text-[#80949B] transition-colors hover:text-[#FF002D]" title="Remove rule (Admin)">
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <span title="Read-only criteria"><Lock className="h-3.5 w-3.5 text-[#80949B]" /></span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className={`space-y-2 rounded-xl border p-4 text-xs ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <span className="block text-[10px] font-bold uppercase text-[#80949B]">Selected Source Detail</span>
+                  <h4 className="font-bold">{selectedSource.title}</h4>
+                  <p className={`leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-600'}`}>{selectedSource.snippet}</p>
+                </div>
               </div>
             </div>
 
-            {isAddRuleModalOpen && userRole === 'admin' && (
+            {isAddRuleModalOpen && isCurrentUserAdmin && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                 <div className={`w-full max-w-md space-y-4 rounded-2xl border p-6 shadow-2xl transition-all ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-white text-slate-900'}`}>
                   <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">

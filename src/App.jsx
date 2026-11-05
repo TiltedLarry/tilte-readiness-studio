@@ -98,6 +98,7 @@ const MANUAL_CHECKPOINTS = [
 export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('studio');
+  const [auditStep, setAuditStep] = useState('metadata');
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState('campaign_manager');
   const [authLoading, setAuthLoading] = useState(true);
@@ -113,7 +114,7 @@ export default function App() {
   const [newRule, setNewRule] = useState({ pillarIndex: 1, title: '', desc: '', weight: 7 });
   const [isSavingMethodology, setIsSavingMethodology] = useState(false);
   const [methodologyStatusMsg, setMethodologyStatusMsg] = useState('');
-  const [expandedPillars, setExpandedPillars] = useState({ 1: true, 2: true, 3: true });
+  const [expandedPillars, setExpandedPillars] = useState({ 1: false, 2: false, 3: false });
   const [manualChecks, setManualChecks] = useState(() => Object.fromEntries(MANUAL_CHECKPOINTS.map(({ id }) => [id, false])));
   const [clientName, setClientName] = useState('');
   const [campaignName, setCampaignName] = useState('');
@@ -126,6 +127,7 @@ export default function App() {
   const [auditResults, setAuditResults] = useState(null);
   const [designFile, setDesignFile] = useState(null);
   const [designFileName, setDesignFileName] = useState('');
+  const [designPreviewUrl, setDesignPreviewUrl] = useState('');
   const [designScanStatus, setDesignScanStatus] = useState('');
   const [isScanningDesign, setIsScanningDesign] = useState(false);
   const [creativeSubject, setCreativeSubject] = useState('');
@@ -135,6 +137,11 @@ export default function App() {
   const [creativeFindings, setCreativeFindings] = useState(null);
 
   const isCurrentUserAdmin = userRole === 'admin' || (user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+
+  useEffect(() => {
+    if (!designPreviewUrl) return undefined;
+    return () => URL.revokeObjectURL(designPreviewUrl);
+  }, [designPreviewUrl]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -332,7 +339,7 @@ export default function App() {
           const canvas = document.createElement('canvas');
           canvas.width = Math.ceil(viewport.width);
           canvas.height = Math.ceil(viewport.height);
-          await page.render({ canvas, canvasContext: canvas.getContext('2d'), viewport }).promise;
+          await page.render({ canvas, canvasContext: canvas.getContext('2d', { willReadFrequently: true }), viewport }).promise;
           canvases.push(canvas);
         }
         if (pdf.numPages > pageCount) {
@@ -348,7 +355,7 @@ export default function App() {
           const canvas = document.createElement('canvas');
           canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
           canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-          canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+          canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, canvas.width, canvas.height);
           canvases.push(canvas);
         } finally {
           URL.revokeObjectURL(imageUrl);
@@ -360,18 +367,41 @@ export default function App() {
       const { createWorker } = await import('tesseract.js');
       worker = await createWorker('eng');
       const recognizedPages = [];
+      const ctaCandidates = [];
+      const visualCtaCandidates = [];
       const colorCounts = new Map();
       let totalConfidence = 0;
+      const ctaPattern = /\b(start|shop|buy|register|subscribe|download|explore|discover|view|apply|donate|contact|reply|sign\s*up|learn|book|confirm|renew|review|schedule|claim|try|get|request|visit)\b/i;
 
       for (const [index, canvas] of canvases.entries()) {
         setDesignScanStatus(`Scanning text and colors on page ${index + 1} of ${canvases.length}...`);
-        const result = await worker.recognize(canvas);
+        const result = await worker.recognize(canvas, {}, { blocks: true, tsv: true });
         recognizedPages.push(result.data.text.trim());
         totalConfidence += result.data.confidence || 0;
+        const recognizedWords = result.data.words || result.data.blocks?.flatMap((block) =>
+          block.paragraphs?.flatMap((paragraph) => paragraph.lines?.flatMap((line) => line.words || []) || []) || [],
+        ) || [];
+        const tsvWords = (result.data.tsv || '').split(/\r?\n/).slice(1).flatMap((row) => {
+          const columns = row.split('\t');
+          if (columns.length < 12 || columns[0] !== '5') return [];
+          const [x, y, wordWidth, wordHeight, confidence] = columns.slice(6, 11).map(Number);
+          const text = columns.slice(11).join('\t').trim();
+          if (!text || !Number.isFinite(x) || !Number.isFinite(y)) return [];
+          return [{ text, confidence, bbox: { x0: x, y0: y, x1: x + wordWidth, y1: y + wordHeight } }];
+        });
+        const ctaWords = (recognizedWords.length ? recognizedWords : tsvWords)
+          .filter((word) => ctaPattern.test(word.text) && word.bbox && (word.confidence || 0) >= 30);
+        if (ctaWords.length) {
+          ctaCandidates.push(...ctaWords.map((word) => ({ text: word.text.trim(), canvas, bbox: word.bbox })));
+        } else {
+          const ctaLine = result.data.lines?.find((line) => ctaPattern.test(line.text));
+          if (ctaLine?.bbox) ctaCandidates.push({ text: ctaLine.text.trim(), canvas, bbox: ctaLine.bbox });
+        }
 
         const context = canvas.getContext('2d', { willReadFrequently: true });
         const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
         const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 40000)));
+        const pageColorBounds = new Map();
         for (let y = 0; y < height; y += step) {
           for (let x = 0; x < width; x += step) {
             const pixelIndex = (y * width + x) * 4;
@@ -380,19 +410,126 @@ export default function App() {
               .map((channel) => Math.min(255, Math.floor(channel / 16) * 16 + 8));
             const hex = `#${color.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
             colorCounts.set(hex, (colorCounts.get(hex) || 0) + 1);
+            const bounds = pageColorBounds.get(hex) || { count: 0, x0: x, y0: y, x1: x, y1: y };
+            bounds.count += 1;
+            bounds.x0 = Math.min(bounds.x0, x);
+            bounds.y0 = Math.min(bounds.y0, y);
+            bounds.x1 = Math.max(bounds.x1, x);
+            bounds.y1 = Math.max(bounds.y1, y);
+            pageColorBounds.set(hex, bounds);
+          }
+        }
+        for (const [hex, bounds] of pageColorBounds) {
+          const rgb = hex.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
+          const boxWidth = bounds.x1 - bounds.x0 + step;
+          const boxHeight = bounds.y1 - bounds.y0 + step;
+          const gridArea = (Math.floor((bounds.x1 - bounds.x0) / step) + 1) * (Math.floor((bounds.y1 - bounds.y0) / step) + 1);
+          const density = bounds.count / Math.max(1, gridArea);
+          const chroma = Math.max(...rgb) - Math.min(...rgb);
+          if (bounds.count >= 40 && density >= 0.62 && chroma >= 48 && boxWidth >= 48 && boxHeight >= 18 && boxWidth / boxHeight >= 1.25 && boxWidth / boxHeight <= 10) {
+            visualCtaCandidates.push({
+              text: '',
+              canvas,
+              bbox: { x0: bounds.x0, y0: bounds.y0, x1: bounds.x1 + step, y1: bounds.y1 + step },
+              solidFill: { rgb, coverage: density },
+            });
           }
         }
       }
 
       const recognizedText = recognizedPages.filter(Boolean).join('\n\n');
       const lines = recognizedText.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-      const callToAction = lines.find((line) => /\b(start|shop|buy|register|subscribe|download|explore|discover|view|apply|donate|contact|reply|sign\s*up|learn|book|confirm|renew|review|schedule|claim|try|get|request|visit)\b/i.test(line));
-      const expectedSubject = creativeSubject.trim() || subjectLine.trim();
-      const expectedPreheader = creativePreheader.trim() || preHeader.trim();
+      const fallbackCta = lines.find((line) => ctaPattern.test(line)) || '';
       const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-      const normalizedDesign = normalize(recognizedText);
-      const subjectFound = expectedSubject ? normalizedDesign.includes(normalize(expectedSubject)) : null;
-      const preheaderFound = expectedPreheader ? normalizedDesign.includes(normalize(expectedPreheader)) : null;
+      const compareBriefCopy = (brief, finalCopy) => {
+        const briefWords = new Set(normalize(brief).split(/\s+/).filter(Boolean));
+        const finalWords = new Set(normalize(finalCopy).split(/\s+/).filter(Boolean));
+        if (!briefWords.size || !finalWords.size) return null;
+        const sharedWords = [...briefWords].filter((word) => finalWords.has(word)).length;
+        return Math.round((sharedWords / new Set([...briefWords, ...finalWords]).size) * 100);
+      };
+      const subjectMatch = compareBriefCopy(subjectLine, creativeSubject);
+      const preheaderMatch = compareBriefCopy(preHeader, creativePreheader);
+      const copyScores = [subjectMatch, preheaderMatch].filter((score) => score !== null);
+      const briefAlignmentScore = copyScores.length
+        ? Math.round(copyScores.reduce((total, score) => total + score, 0) / copyScores.length)
+        : null;
+
+      const analyzeCtaButton = ({ canvas, bbox, solidFill }) => {
+        const { data, width, height } = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height);
+        const textBox = {
+          x0: Math.max(0, Math.floor(bbox.x0)),
+          y0: Math.max(0, Math.floor(bbox.y0)),
+          x1: Math.min(width, Math.ceil(bbox.x1)),
+          y1: Math.min(height, Math.ceil(bbox.y1)),
+        };
+        const textHeight = Math.max(1, textBox.y1 - textBox.y0);
+        const padX = Math.max(10, Math.round(textHeight * 0.8));
+        const padY = Math.max(8, Math.round(textHeight * 0.45));
+        const buttonBox = solidFill ? textBox : {
+          x0: Math.max(0, textBox.x0 - padX),
+          y0: Math.max(0, textBox.y0 - padY),
+          x1: Math.min(width, textBox.x1 + padX),
+          y1: Math.min(height, textBox.y1 + padY),
+        };
+        const outsideBox = {
+          x0: Math.max(0, buttonBox.x0 - padX),
+          y0: Math.max(0, buttonBox.y0 - padY),
+          x1: Math.min(width, buttonBox.x1 + padX),
+          y1: Math.min(height, buttonBox.y1 + padY),
+        };
+        const quantize = (pixelIndex) => [data[pixelIndex], data[pixelIndex + 1], data[pixelIndex + 2]]
+          .map((channel) => Math.min(255, Math.floor(channel / 16) * 16 + 8));
+        const colorKey = (rgb) => rgb.map((channel) => channel.toString(16).padStart(2, '0')).join('');
+        const collectColors = (bounds, accept, excludeColor = null) => {
+          const counts = new Map();
+          const stride = Math.max(1, Math.floor(Math.max(bounds.x1 - bounds.x0, bounds.y1 - bounds.y0) / 80));
+          for (let y = bounds.y0; y < bounds.y1; y += stride) {
+            for (let x = bounds.x0; x < bounds.x1; x += stride) {
+              if (!accept(x, y)) continue;
+              const pixelIndex = (y * width + x) * 4;
+              if (data[pixelIndex + 3] < 180) continue;
+              const rgb = quantize(pixelIndex);
+              if (excludeColor && Math.sqrt(rgb.reduce((total, channel, channelIndex) => total + (channel - excludeColor[channelIndex]) ** 2, 0)) < 60) continue;
+              const key = colorKey(rgb);
+              counts.set(key, (counts.get(key) || 0) + 1);
+            }
+          }
+          const [key, count] = [...counts.entries()].sort((left, right) => right[1] - left[1])[0] || [];
+          return { rgb: key ? key.match(/.{2}/g).map((channel) => parseInt(channel, 16)) : null, coverage: count && counts.size ? count / [...counts.values()].reduce((sum, value) => sum + value, 0) : 0 };
+        };
+        const inBox = (box, x, y) => x >= box.x0 && x < box.x1 && y >= box.y0 && y < box.y1;
+        const fill = solidFill || collectColors(buttonBox, (x, y) => !inBox(textBox, x, y));
+        const outer = collectColors(outsideBox, (x, y) => !inBox(buttonBox, x, y));
+        const text = collectColors(textBox, (x, y) => inBox(textBox, x, y), fill.rgb);
+        const colorDistance = (left, right) => left && right
+          ? Math.sqrt(left.reduce((total, channel, index) => total + (channel - right[index]) ** 2, 0))
+          : 0;
+        const luminance = (rgb) => {
+          const channels = rgb.map((channel) => channel / 255).map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+          return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+        };
+        const textContrast = fill.rgb && text.rgb
+          ? (Math.max(luminance(fill.rgb), luminance(text.rgb)) + 0.05) / (Math.min(luminance(fill.rgb), luminance(text.rgb)) + 0.05)
+          : null;
+        const standoutColor = Boolean(fill.rgb && outer.rgb && colorDistance(fill.rgb, outer.rgb) >= 55 && Math.max(...fill.rgb) - Math.min(...fill.rgb) >= 40);
+        const buttonAspectRatio = (buttonBox.x1 - buttonBox.x0) / Math.max(1, buttonBox.y1 - buttonBox.y0);
+        return {
+          buttonLike: fill.coverage >= 0.55 && colorDistance(fill.rgb, outer.rgb) >= 55 && buttonAspectRatio >= 1.25,
+          standoutColor,
+          fillColor: fill.rgb ? `#${colorKey(fill.rgb)}` : null,
+          textColor: text.rgb ? `#${colorKey(text.rgb)}` : null,
+          contrastRatio: textContrast ? Math.round(textContrast * 100) / 100 : null,
+        };
+      };
+      const analyzedCtas = [...ctaCandidates, ...visualCtaCandidates].map((candidate) => ({ ...candidate, analysis: analyzeCtaButton(candidate) }));
+      analyzedCtas.sort((left, right) => Number(right.analysis.buttonLike) - Number(left.analysis.buttonLike)
+        || Number(right.analysis.standoutColor) - Number(left.analysis.standoutColor)
+        || Number(Boolean(right.text)) - Number(Boolean(left.text))
+        || (right.analysis.contrastRatio || 0) - (left.analysis.contrastRatio || 0));
+      const selectedCta = analyzedCtas[0];
+      const callToAction = selectedCta?.text || (selectedCta?.analysis.buttonLike ? '' : fallbackCta);
+      const ctaButton = selectedCta?.analysis || null;
       const detectedColors = [...colorCounts.entries()]
         .sort((left, right) => right[1] - left[1])
         .slice(0, 8)
@@ -414,17 +551,24 @@ export default function App() {
         confidence: Math.round(totalConfidence / canvases.length),
         recognizedText: recognizedText || 'No readable text was detected in the uploaded design.',
         detectedColors,
+        briefAlignmentScore,
+        subjectMatch,
+        preheaderMatch,
+        ctaText: callToAction || (ctaButton?.buttonLike ? 'Button-like block detected; CTA label not readable' : 'No CTA text detected'),
+        ctaButton,
         colorAdherence: expectedColors.length
           ? `${matchedColors.length} of ${expectedColors.length} brief colors were found in the sampled design palette.`
           : 'No hex colors were specified in the client design brief, so palette matching was not assessed.',
         ctaRecommendation: callToAction
           ? vagueCta
             ? `The scan found "${callToAction}". Consider replacing it with a specific action tied to the campaign goal.`
-            : `The scan found this possible call to action: "${callToAction}". Confirm it is prominent and matches the campaign goal.`
-          : 'No recognizable call-to-action text was detected in the scanned design.',
+            : `The scan found this possible call to action: "${callToAction}". Review the button-shape, standout-color, and contrast checks below.`
+          : ctaButton?.buttonLike
+            ? 'A solid, standout button-like region was detected, but its label was not readable. Review its copy manually.'
+            : 'No recognizable CTA text or button-like color region was detected in the scanned design.',
         contentMatch: [
-          subjectFound === null ? 'Final subject was not provided for comparison.' : `Final subject ${subjectFound ? 'was' : 'was not'} detected in the design.`,
-          preheaderFound === null ? 'Final pre-header was not provided for comparison.' : `Final pre-header ${preheaderFound ? 'was' : 'was not'} detected in the design.`,
+          subjectMatch === null ? 'Enter the brief and final subject in Audit Studio and Creative Review to compare them.' : `Subject keyword overlap with brief: ${subjectMatch}%.`,
+          preheaderMatch === null ? 'Enter the brief and final pre-header in Audit Studio and Creative Review to compare them.' : `Pre-header keyword overlap with brief: ${preheaderMatch}%.`,
         ].join(' '),
       });
       setCreativeAuditRun(true);
@@ -515,6 +659,7 @@ export default function App() {
     if (file) {
       setDesignFile(file);
       setDesignFileName(file.name);
+      setDesignPreviewUrl(URL.createObjectURL(file));
       setCreativeAuditRun(false);
       setCreativeFindings(null);
       setDesignScanStatus('Ready to scan.');
@@ -745,9 +890,30 @@ export default function App() {
       <main className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
         {activeTab === 'studio' && (
           <div className="space-y-8">
+            <div className={`grid grid-cols-3 rounded-xl border p-1 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-100'}`} role="tablist" aria-label="Audit steps">
+              {[
+                { id: 'metadata', label: 'Campaign Metadata & Objectives', number: '01' },
+                { id: 'verification', label: 'Manual Verification Checkpoints', number: '02' },
+                { id: 'content', label: 'Email Content & Headers', number: '03' },
+              ].map((step) => (
+                <button
+                  key={step.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={auditStep === step.id}
+                  onClick={() => setAuditStep(step.id)}
+                  className={`flex min-h-14 items-center justify-center gap-2 rounded-lg px-2 py-2 text-center text-[11px] font-semibold transition-colors sm:text-xs ${auditStep === step.id ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                >
+                  <span className="font-mono text-[10px] opacity-70">{step.number}</span>
+                  <span>{step.label}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
               <div className="contents">
-                <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+                {auditStep === 'metadata' && (
+                <div className={`section-card rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                   <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <Building2 className="h-4 w-4" />
                     <span>Campaign Metadata & Objectives</span>
@@ -775,32 +941,37 @@ export default function App() {
                     </div>
                   </div>
 
-                  <fieldset className="space-y-3 border-t border-[#405E69]/40 pt-4">
-                    <legend className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Manual Verification Checkpoints</legend>
-                    <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Confirm these using your sending platform, DNS records, policy documentation, or rendered-email tests. Unchecked items receive no points.
-                    </p>
-                    <div className="grid grid-cols-1 gap-x-5 gap-y-2 sm:grid-cols-2">
-                      {MANUAL_CHECKPOINTS.map((checkpoint) => (
-                        <label key={checkpoint.id} className="flex items-start gap-2 border-b border-[#405E69]/30 pb-2 text-xs leading-relaxed">
-                          <input
-                            type="checkbox"
-                            checked={manualChecks[checkpoint.id]}
-                            onChange={(event) => {
-                              setManualChecks((current) => ({ ...current, [checkpoint.id]: event.target.checked }));
-                              setHasCalculated(false);
-                              setAuditResults(null);
-                            }}
-                            className="mt-0.5 shrink-0 accent-[#FF002D]"
-                          />
-                          <span>{checkpoint.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
                 </div>
+                )}
 
-                <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+                {auditStep === 'verification' && (
+                <div className={`section-card rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Manual Verification Checkpoints</h3>
+                  <p className={`text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                    Confirm these using your sending platform, DNS records, policy documentation, or rendered-email tests. Unchecked items receive no points.
+                  </p>
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                    {MANUAL_CHECKPOINTS.map((checkpoint) => (
+                      <label key={checkpoint.id} className="flex items-start gap-2 border-b border-[#405E69]/30 py-2 text-xs leading-relaxed">
+                        <input
+                          type="checkbox"
+                          checked={manualChecks[checkpoint.id]}
+                          onChange={(event) => {
+                            setManualChecks((current) => ({ ...current, [checkpoint.id]: event.target.checked }));
+                            setHasCalculated(false);
+                            setAuditResults(null);
+                          }}
+                          className="mt-0.5 shrink-0 accent-[#FF002D]"
+                        />
+                        <span>{checkpoint.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {auditStep === 'content' && (
+                <div className={`section-card rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                   <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <Mail className="h-4 w-4" />
                     <span>Email Content & Headers</span>
@@ -808,7 +979,7 @@ export default function App() {
 
                   <div>
                     <div className="mb-1 flex items-center justify-between">
-                      <label className="text-xs font-medium">Subject Line</label>
+                      <label className="text-xs font-medium">Briefed Subject Line</label>
                       <span className={`text-[10px] ${subjectLine.length > 65 ? 'font-bold text-[#FF002D]' : darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>
                         {subjectLine.length} chars (optimal 20–65)
                       </span>
@@ -818,7 +989,7 @@ export default function App() {
 
                   <div>
                     <div className="mb-1 flex items-center justify-between">
-                      <label className="text-xs font-medium">Pre-Header (Preview Text)</label>
+                      <label className="text-xs font-medium">Briefed Pre-Header (Preview Text)</label>
                       <span className={`text-[10px] ${preHeader.length < 20 && preHeader.length > 0 ? 'text-[#FF002D]' : darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>
                         {preHeader.length} chars
                       </span>
@@ -840,11 +1011,12 @@ export default function App() {
                     </p>
                   </div>
                 </div>
+                )}
               </div>
 
               {hasCalculated && auditResults && (
                 <div className="lg:col-span-12">
-                  <div className={`space-y-6 rounded-2xl border p-6 transition-all ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+                  <div className={`section-card rounded-2xl border p-5 transition-all ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                     <div className="flex flex-col justify-between gap-4 border-b border-[#405E69]/50 pb-5 sm:flex-row sm:items-center">
                       <div>
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Tilte Readiness Scorecard</span>
@@ -864,10 +1036,10 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Pillar Breakdown (Click to Expand / Collapse)</h4>
-                        <span className="text-[10px] text-[#80949B]">Zero scroll lock design</span>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div className="flex items-center justify-between md:col-span-3">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Pillar Breakdown</h4>
+                        <span className="text-[10px] text-[#80949B]">Select a pillar to view its criteria</span>
                       </div>
 
                       {[
@@ -938,7 +1110,7 @@ export default function App() {
               )}
             </div>
 
-            <div className={`space-y-4 rounded-2xl border p-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+            <div className={`section-card rounded-2xl border p-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
               <div className="flex flex-col justify-between gap-3 border-b border-[#405E69]/40 pb-4 md:flex-row md:items-center">
                 <div className="flex items-center space-x-2.5">
                   <div className="rounded-xl border border-[#741532] bg-[#4D1B34] p-2 text-white">
@@ -1036,7 +1208,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-slate-900 shadow-xl print:border-none print:p-0 print:shadow-none sm:p-12">
+            <div className="section-card section-card-light rounded-2xl border border-slate-200 bg-white p-8 text-slate-900 shadow-xl print:border-none print:p-0 print:shadow-none sm:p-12">
               <div className="flex items-start justify-between border-b-2 border-slate-900 pb-6">
                 <div>
                   <div className="flex items-center space-x-2">
@@ -1125,7 +1297,7 @@ export default function App() {
 
         {activeTab === 'methodology' && (
           <div className="space-y-6">
-            <div className={`flex flex-col justify-between gap-4 rounded-2xl border p-6 md:flex-row md:items-center ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+            <div className={`section-card flex flex-col justify-between gap-4 rounded-2xl border p-6 md:flex-row md:items-center ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
               <div>
                 <div className="flex items-center space-x-2">
                   <BookOpen className="h-5 w-5 text-[#80949B]" />
@@ -1168,7 +1340,7 @@ export default function App() {
             )}
 
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-              <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-4 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+              <div className={`section-card rounded-2xl border p-5 lg:col-span-4 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                 <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
                   <h3 className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <FileText className="h-4 w-4" />
@@ -1196,7 +1368,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-8 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+              <div className={`section-card rounded-2xl border p-5 lg:col-span-8 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                 <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Active Criteria & Scoring Weight Rules ({rules.length})</h3>
                   <div className="flex items-center space-x-3">
@@ -1287,18 +1459,18 @@ export default function App() {
 
         {activeTab === 'creative' && (
           <div className="space-y-6">
-            <div className={`rounded-2xl border p-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+            <div className={`section-card rounded-2xl border p-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
               <div className="flex items-center space-x-2">
                 <Palette className="h-5 w-5 text-[#80949B]" />
                 <h2 className="text-lg font-black tracking-tight">Creative Review & CI Adherence Studio</h2>
               </div>
               <p className={`mt-1 text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                Scan the final email design for visible copy and colors, then compare the results with the client design brief and final subject details.
+                Preview the final design, compare final subject and pre-header copy with the Audit Studio brief, and inspect CTA button styling.
               </p>
             </div>
 
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-              <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+              <div className={`section-card rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Final Email Design & Client Brief</h3>
 
                 <div className={`rounded-xl border-2 border-dashed p-5 text-center ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
@@ -1311,6 +1483,19 @@ export default function App() {
                 </div>
                 {designScanStatus && <p className={`text-[11px] ${designScanStatus.startsWith('The design could not') || designScanStatus.startsWith('Upload') ? 'text-rose-400' : darkMode ? 'text-[#80949B]' : 'text-slate-500'}`} role="status">{designScanStatus}</p>}
 
+                {designPreviewUrl && (
+                  <div className={`overflow-hidden rounded-xl border ${darkMode ? 'border-[#405E69] bg-[#001D29]' : 'border-[#BFC9CE] bg-slate-100'}`}>
+                    <div className={`border-b px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'border-[#405E69] text-[#80949B]' : 'border-[#BFC9CE] text-slate-500'}`}>
+                      Final Email Design Preview
+                    </div>
+                    {designFile?.type === 'application/pdf' || designFile?.name.toLowerCase().endsWith('.pdf') ? (
+                      <iframe title="Final email design preview" src={designPreviewUrl} className="h-80 w-full bg-white" />
+                    ) : (
+                      <img src={designPreviewUrl} alt={`Preview of ${designFileName}`} className="max-h-[28rem] w-full bg-white object-contain" />
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="mb-1 block text-xs font-medium">Client Design Brief</label>
                   <textarea rows={4} placeholder="Describe the intended layout, brand colors (include hex values), typography, imagery, accessibility needs, and CTA treatment." value={designBriefContent} onChange={(e) => setDesignBriefContent(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
@@ -1318,14 +1503,17 @@ export default function App() {
 
                 <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block font-medium">Final Subject (for comparison)</label>
+                    <label className="mb-1 block font-medium">Final Subject</label>
                     <input type="text" placeholder="e.g. Product Update Announcement" value={creativeSubject} onChange={(e) => setCreativeSubject(e.target.value)} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
                   </div>
                   <div>
-                    <label className="mb-1 block font-medium">Final Pre-Header (for comparison)</label>
+                    <label className="mb-1 block font-medium">Final Pre-Header</label>
                     <input type="text" placeholder="e.g. Action required by 28 Feb" value={creativePreheader} onChange={(e) => setCreativePreheader(e.target.value)} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
                   </div>
                 </div>
+                <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                  These final values are compared with the briefed subject and pre-header entered under Email Content & Headers; they do not need to appear inside the Figma render.
+                </p>
 
                 <button type="button" onClick={handleRunCreativeReview} disabled={isScanningDesign} className="flex w-full items-center justify-center space-x-2 rounded-xl bg-[#405E69] px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow disabled:cursor-wait disabled:opacity-60">
                   <Target className="h-4 w-4" />
@@ -1333,7 +1521,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className={`space-y-5 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+              <div className={`section-card rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Creative Review Audit Results</h3>
 
                 {creativeAuditRun && creativeFindings ? (
@@ -1346,7 +1534,12 @@ export default function App() {
                           {creativeFindings.pagesScanned} page(s), {creativeFindings.wordCount} words detected
                         </p>
                       </div>
-                      <span className="text-right text-xs font-bold">{creativeFindings.confidence}%<span className="block text-[10px] font-medium text-[#80949B]">OCR confidence</span></span>
+                      <div className="text-right">
+                        <span className="text-xs font-bold">{creativeFindings.confidence}%</span>
+                        <span className="block text-[10px] font-medium text-[#80949B]">OCR confidence</span>
+                        <span className="mt-1 block text-lg font-black">{creativeFindings.briefAlignmentScore === null ? 'N/A' : `${creativeFindings.briefAlignmentScore}%`}</span>
+                        <span className="block text-[10px] font-medium text-[#80949B]">Brief copy alignment</span>
+                      </div>
                     </div>
 
                     <div className={`space-y-1.5 rounded-xl border p-4 ${darkMode ? 'border-[#741532] bg-[#4D1B34]/30' : 'border-rose-200 bg-rose-50'}`}>
@@ -1355,21 +1548,18 @@ export default function App() {
                         <span>CTA Detected in Design</span>
                       </span>
                       <p className="leading-relaxed">{creativeFindings.ctaRecommendation}</p>
+                      <div className="grid grid-cols-1 gap-2 border-t border-[#741532]/40 pt-2 sm:grid-cols-3">
+                        <p>Button shape: <strong>{creativeFindings.ctaButton ? (creativeFindings.ctaButton.buttonLike ? 'detected' : 'not detected') : 'not assessable'}</strong></p>
+                        <p>Standout fill: <strong>{creativeFindings.ctaButton ? (creativeFindings.ctaButton.standoutColor ? creativeFindings.ctaButton.fillColor : 'not detected') : 'not assessable'}</strong></p>
+                        <p>Text contrast: <strong>{creativeFindings.ctaButton?.contrastRatio ? `${creativeFindings.ctaButton.contrastRatio}:1${creativeFindings.ctaButton.contrastRatio >= 4.5 ? ' (pass)' : ' (low)'}` : 'not assessable'}</strong></p>
+                      </div>
                     </div>
 
                     <div className="space-y-2.5">
                       <div className={`flex items-start space-x-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                         <div>
-                          <strong className="block">CI Color Adherence:</strong>
-                          <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{creativeFindings.colorAdherence}</p>
-                        </div>
-                      </div>
-
-                      <div className={`flex items-start space-x-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                        <div>
-                          <strong className="block">Subject & Pre-Header Match:</strong>
+                          <strong className="block">Brief Subject & Pre-Header Comparison:</strong>
                           <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{creativeFindings.contentMatch}</p>
                         </div>
                       </div>

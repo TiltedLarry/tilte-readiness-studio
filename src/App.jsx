@@ -28,11 +28,8 @@ import {
   Mail,
   Cpu,
   Edit3,
-  BarChart3,
   Building2,
   Zap,
-  UploadCloud,
-  FileCode,
   BookOpen,
   Plus,
   Trash2,
@@ -81,11 +78,28 @@ const DEFAULT_SOURCES = [
   { id: 's3', title: 'Inbox LLM Parsing Benchmarks (Apple, Gemini, Copilot)', category: 'Technical QA', date: '2027-02-04', snippet: 'Empirical testing observations documenting how email headers and live-text HTML elements are extracted into conversational cards.' },
 ];
 
+const MANUAL_CHECKPOINTS = [
+  { id: 'senderAuthentication', ruleId: 'r1', label: 'SPF, DKIM, DMARC, and BIMI records are configured and verified.' },
+  { id: 'consentAndSuppression', ruleId: 'r2', label: 'Consent records and suppression lists are current and applied to this send.' },
+  { id: 'unsubscribe', ruleId: 'r3', label: 'The unsubscribe link works and one-click unsubscribe headers are configured where required.' },
+  { id: 'senderReputation', ruleId: 'r4', label: 'Sender reputation, complaint rates, list quality, and sending volume have been reviewed.' },
+  { id: 'clientRendering', ruleId: 'r5', label: 'The email has been rendered and tested in the target email clients.' },
+  { id: 'mobileExperience', ruleId: 'r6', label: 'The email has been checked on mobile devices, including layout and tap targets.' },
+  { id: 'imageFallback', ruleId: 'r7', label: 'The message remains understandable when images are blocked.' },
+  { id: 'accessibility', ruleId: 'r8', label: 'Accessibility, contrast, alt text, and dark-mode behavior have been checked.' },
+  { id: 'senderIdentity', ruleId: 'r9', label: 'The from name and sending domain are recognizable and aligned with the brand.' },
+  { id: 'personalizationData', ruleId: 'r11', label: 'Personalization data, consent, and fallback behavior have been validated.' },
+  { id: 'sendCadence', ruleId: 'r12', label: 'Lifecycle timing and frequency limits are configured for this audience.' },
+  { id: 'aiReadability', ruleId: 'r13', label: 'Dates, amounts, and next steps are clear and accurate in the final rendered email.' },
+  { id: 'measurement', ruleId: 'r14', label: 'Click and conversion tracking are configured and have been tested.' },
+  { id: 'experimentation', ruleId: 'r15', label: 'A test hypothesis, audience split, and success measure are documented.' },
+];
+
 export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('studio');
   const [user, setUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
+  const [userRole, setUserRole] = useState('campaign_manager');
   const [authLoading, setAuthLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -100,8 +114,7 @@ export default function App() {
   const [isSavingMethodology, setIsSavingMethodology] = useState(false);
   const [methodologyStatusMsg, setMethodologyStatusMsg] = useState('');
   const [expandedPillars, setExpandedPillars] = useState({ 1: true, 2: true, 3: true });
-  const [briefFileName, setBriefFileName] = useState('');
-  const [copyFileName, setCopyFileName] = useState('');
+  const [manualChecks, setManualChecks] = useState(() => Object.fromEntries(MANUAL_CHECKPOINTS.map(({ id }) => [id, false])));
   const [clientName, setClientName] = useState('');
   const [campaignName, setCampaignName] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
@@ -111,61 +124,97 @@ export default function App() {
   const [emailCopy, setEmailCopy] = useState('');
   const [hasCalculated, setHasCalculated] = useState(false);
   const [auditResults, setAuditResults] = useState(null);
+  const [designFile, setDesignFile] = useState(null);
   const [designFileName, setDesignFileName] = useState('');
+  const [designScanStatus, setDesignScanStatus] = useState('');
+  const [isScanningDesign, setIsScanningDesign] = useState(false);
   const [creativeSubject, setCreativeSubject] = useState('');
   const [creativePreheader, setCreativePreheader] = useState('');
-  const [ciGuideContent, setCiGuideContent] = useState('');
+  const [designBriefContent, setDesignBriefContent] = useState('');
   const [creativeAuditRun, setCreativeAuditRun] = useState(false);
   const [creativeFindings, setCreativeFindings] = useState(null);
 
-  const isCurrentUserAdmin = Boolean(userProfile?.role === 'admin' || user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
+  const isCurrentUserAdmin = userRole === 'admin' || (user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        const isSuperAdmin = currentUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
-        const userDocRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', currentUser.uid);
-        const snap = await getDoc(userDocRef);
+      setUser(currentUser);
+      if (!currentUser) {
+        setUser(null);
+        setUserRole('campaign_manager');
+        setAuthLoading(false);
+        return;
+      }
 
+      const isSuperAdmin = currentUser.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+      const userDocRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', currentUser.uid);
+
+      try {
+        const snap = await getDoc(userDocRef);
         if (!snap.exists()) {
           const initialData = {
             uid: currentUser.uid,
             email: currentUser.email,
-            displayName: currentUser.displayName || currentUser.email.split('@')[0],
+            displayName: currentUser.displayName || currentUser.email?.split('@')[0] || '',
             photoURL: currentUser.photoURL || '',
             role: isSuperAdmin ? 'admin' : 'campaign_manager',
             isSuperAdmin,
             createdAt: serverTimestamp(),
           };
           await setDoc(userDocRef, initialData);
-          setUserProfile(initialData);
+          setUserRole(initialData.role);
         } else {
           const userData = snap.data();
           if (isSuperAdmin && userData.role !== 'admin') {
             await updateDoc(userDocRef, { role: 'admin', isSuperAdmin: true });
-            setUserProfile({ ...userData, role: 'admin', isSuperAdmin: true });
+            setUserRole('admin');
           } else {
-            setUserProfile({ ...userData, role: userData.role || 'campaign_manager' });
+            setUserRole(userData.role || 'campaign_manager');
           }
         }
-        setUser(currentUser);
-      } else {
-        setUser(null);
-        setUserProfile(null);
+      } catch (error) {
+        console.error('Could not load the signed-in user profile:', error);
+        setUserRole(isSuperAdmin ? 'admin' : 'campaign_manager');
+      } finally {
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (user) {
-      setShowAuthModal(false);
-      setAuthMode('login');
-      setAuthError('');
-      setActiveTab('studio');
-    }
+    if (!user) return;
+
+    const methodologyDocRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'methodology', 'global_rules_2027');
+
+    const unsubscribe = onSnapshot(
+      methodologyDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.rules && Array.isArray(data.rules) && data.rules.length > 0) {
+            setRules(data.rules);
+          }
+          if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
+            setSources(data.sources);
+            if (!selectedSource) setSelectedSource(data.sources[0]);
+          }
+        } else {
+          setDoc(methodologyDocRef, {
+            rules: DEFAULT_RULES,
+            sources: DEFAULT_SOURCES,
+            lastUpdated: new Date().toISOString(),
+            updatedBy: user.email || 'system',
+          }).catch((err) => console.warn('Could not auto-seed methodology doc:', err));
+        }
+      },
+      (error) => {
+        console.error('Firestore Methodology Snapshot Error:', error);
+      },
+    );
+
+    return () => unsubscribe();
   }, [user]);
 
   const saveMethodologyToFirestore = async (updatedRules, updatedSources) => {
@@ -255,29 +304,137 @@ export default function App() {
     saveMethodologyToFirestore(updated, sources);
   };
 
-  const handleRunCreativeReview = () => {
-    if (!ciGuideContent.trim() && !creativeSubject.trim()) {
-      alert('Please enter CI Guide parameters or updated subject headers to audit.');
+  const handleRunCreativeReview = async () => {
+    if (!designFile) {
+      setDesignScanStatus('Upload the final email design before running the scan.');
       return;
     }
 
-    const ctaMatch = emailCopy.match(/\[(.*?)\]/);
-    const existingCta = ctaMatch ? ctaMatch[1] : 'Explore More';
-    const isVagueCta = /explore|click here|learn more|check out/i.test(existingCta);
+    setIsScanningDesign(true);
+    setDesignScanStatus('Preparing final design for scanning...');
+    setCreativeAuditRun(false);
+    setCreativeFindings(null);
 
-    setCreativeFindings({
-      ciScore: 89,
-      ctaOriginal: existingCta,
-      ctaRecommendation: isVagueCta
-        ? `Replace passive verb "${existingCta}" with specific action: "See Your Renewal Terms" or "Confirm Cover".`
-        : `Strong action CTA: "${existingCta}" creates high intent recognition.`,
-      colorAdherence: ciGuideContent.toLowerCase().includes('#') || ciGuideContent.toLowerCase().includes('red') || ciGuideContent.toLowerCase().includes('navy')
-        ? 'Palette strictly adheres to primary brand codes with sufficient CTA button contrast.'
-        : 'Brand palette rules applied from standard design system guide.',
-      positionAssessment: 'Primary CTA positioned above the 500px fold on mobile devices; secondary links subdued.',
-    });
+    let worker;
+    try {
+      const canvases = [];
+      if (designFile.type === 'application/pdf' || designFile.name.toLowerCase().endsWith('.pdf')) {
+        const pdfjs = await import('pdfjs-dist');
+        const pdfWorker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker.default;
+        const pdf = await pdfjs.getDocument({ data: await designFile.arrayBuffer() }).promise;
+        const pageCount = Math.min(pdf.numPages, 10);
+        for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+          setDesignScanStatus(`Rendering PDF page ${pageNumber} of ${pageCount}...`);
+          const page = await pdf.getPage(pageNumber);
+          const baseViewport = page.getViewport({ scale: 1 });
+          const viewport = page.getViewport({ scale: Math.min(1.5, 1600 / Math.max(baseViewport.width, baseViewport.height)) });
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.ceil(viewport.width);
+          canvas.height = Math.ceil(viewport.height);
+          await page.render({ canvas, canvasContext: canvas.getContext('2d'), viewport }).promise;
+          canvases.push(canvas);
+        }
+        if (pdf.numPages > pageCount) {
+          setDesignScanStatus(`Scanning the first ${pageCount} of ${pdf.numPages} PDF pages...`);
+        }
+      } else if (designFile.type.startsWith('image/')) {
+        const imageUrl = URL.createObjectURL(designFile);
+        try {
+          const image = new Image();
+          image.src = imageUrl;
+          await image.decode();
+          const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+          canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+          canvases.push(canvas);
+        } finally {
+          URL.revokeObjectURL(imageUrl);
+        }
+      } else {
+        throw new Error('Use a PNG, JPG, WEBP, SVG, or PDF export for the design scan.');
+      }
 
-    setCreativeAuditRun(true);
+      const { createWorker } = await import('tesseract.js');
+      worker = await createWorker('eng');
+      const recognizedPages = [];
+      const colorCounts = new Map();
+      let totalConfidence = 0;
+
+      for (const [index, canvas] of canvases.entries()) {
+        setDesignScanStatus(`Scanning text and colors on page ${index + 1} of ${canvases.length}...`);
+        const result = await worker.recognize(canvas);
+        recognizedPages.push(result.data.text.trim());
+        totalConfidence += result.data.confidence || 0;
+
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+        const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 40000)));
+        for (let y = 0; y < height; y += step) {
+          for (let x = 0; x < width; x += step) {
+            const pixelIndex = (y * width + x) * 4;
+            if (data[pixelIndex + 3] < 180) continue;
+            const color = [data[pixelIndex], data[pixelIndex + 1], data[pixelIndex + 2]]
+              .map((channel) => Math.min(255, Math.floor(channel / 16) * 16 + 8));
+            const hex = `#${color.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+            colorCounts.set(hex, (colorCounts.get(hex) || 0) + 1);
+          }
+        }
+      }
+
+      const recognizedText = recognizedPages.filter(Boolean).join('\n\n');
+      const lines = recognizedText.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+      const callToAction = lines.find((line) => /\b(start|shop|buy|register|subscribe|download|explore|discover|view|apply|donate|contact|reply|sign\s*up|learn|book|confirm|renew|review|schedule|claim|try|get|request|visit)\b/i.test(line));
+      const expectedSubject = creativeSubject.trim() || subjectLine.trim();
+      const expectedPreheader = creativePreheader.trim() || preHeader.trim();
+      const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const normalizedDesign = normalize(recognizedText);
+      const subjectFound = expectedSubject ? normalizedDesign.includes(normalize(expectedSubject)) : null;
+      const preheaderFound = expectedPreheader ? normalizedDesign.includes(normalize(expectedPreheader)) : null;
+      const detectedColors = [...colorCounts.entries()]
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, 8)
+        .map(([hex]) => hex);
+      const expectedColors = [...new Set(designBriefContent.match(/#[0-9a-f]{6}\b/gi) || [])];
+      const matchedColors = expectedColors.filter((expected) => {
+        const expectedRgb = expected.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
+        return detectedColors.some((detected) => {
+          const detectedRgb = detected.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
+          const distance = Math.sqrt(expectedRgb.reduce((sum, channel, channelIndex) => sum + (channel - detectedRgb[channelIndex]) ** 2, 0));
+          return distance <= 48;
+        });
+      });
+      const vagueCta = callToAction && /click here|learn more|explore more|find out more/i.test(callToAction);
+
+      setCreativeFindings({
+        pagesScanned: canvases.length,
+        wordCount: recognizedText.split(/\s+/).filter(Boolean).length,
+        confidence: Math.round(totalConfidence / canvases.length),
+        recognizedText: recognizedText || 'No readable text was detected in the uploaded design.',
+        detectedColors,
+        colorAdherence: expectedColors.length
+          ? `${matchedColors.length} of ${expectedColors.length} brief colors were found in the sampled design palette.`
+          : 'No hex colors were specified in the client design brief, so palette matching was not assessed.',
+        ctaRecommendation: callToAction
+          ? vagueCta
+            ? `The scan found "${callToAction}". Consider replacing it with a specific action tied to the campaign goal.`
+            : `The scan found this possible call to action: "${callToAction}". Confirm it is prominent and matches the campaign goal.`
+          : 'No recognizable call-to-action text was detected in the scanned design.',
+        contentMatch: [
+          subjectFound === null ? 'Final subject was not provided for comparison.' : `Final subject ${subjectFound ? 'was' : 'was not'} detected in the design.`,
+          preheaderFound === null ? 'Final pre-header was not provided for comparison.' : `Final pre-header ${preheaderFound ? 'was' : 'was not'} detected in the design.`,
+        ].join(' '),
+      });
+      setCreativeAuditRun(true);
+      setDesignScanStatus('Design scan complete.');
+    } catch (error) {
+      setDesignScanStatus(error.message || 'The design could not be scanned.');
+    } finally {
+      if (worker) await worker.terminate();
+      setIsScanningDesign(false);
+    }
   };
 
   const handleAuthSubmit = async (e) => {
@@ -290,7 +447,7 @@ export default function App() {
         const cred = await createUserWithEmailAndPassword(auth, authEmail, authPassword);
         const userDocRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'users', cred.user.uid);
         const defaultRole = cred.user.email && (cred.user.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() || cred.user.email.endsWith('@tilte.com')) ? 'admin' : 'campaign_manager';
-        const profile = {
+        await setDoc(userDocRef, {
           uid: cred.user.uid,
           email: cred.user.email,
           displayName: cred.user.displayName || cred.user.email.split('@')[0],
@@ -298,13 +455,13 @@ export default function App() {
           role: defaultRole,
           isSuperAdmin: cred.user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase(),
           createdAt: serverTimestamp(),
-        };
-        await setDoc(userDocRef, profile);
-        setUserProfile(profile);
+        });
+        setUserRole(defaultRole);
       }
       setShowAuthModal(false);
       setAuthEmail('');
       setAuthPassword('');
+      setActiveTab('studio');
     } catch (err) {
       setAuthError(err.message || 'Authentication failed. Please verify credentials.');
     }
@@ -319,7 +476,7 @@ export default function App() {
       const snap = await getDoc(userDocRef);
       if (!snap.exists()) {
         const defaultRole = cred.user.email && (cred.user.email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() || cred.user.email.endsWith('@tilte.com')) ? 'admin' : 'campaign_manager';
-        const profile = {
+        await setDoc(userDocRef, {
           uid: cred.user.uid,
           email: cred.user.email,
           displayName: cred.user.displayName || cred.user.email.split('@')[0],
@@ -327,13 +484,11 @@ export default function App() {
           role: defaultRole,
           isSuperAdmin: cred.user.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase(),
           createdAt: serverTimestamp(),
-        };
-        await setDoc(userDocRef, profile);
-        setUserProfile(profile);
-      } else {
-        setUserProfile({ ...snap.data(), role: snap.data().role || 'campaign_manager' });
+        });
+        setUserRole(defaultRole);
       }
       setShowAuthModal(false);
+      setActiveTab('studio');
     } catch (err) {
       setAuthError(err.message || 'Google Sign-in failed.');
     }
@@ -341,7 +496,7 @@ export default function App() {
 
   const handleSignOut = async () => {
     await signOut(auth);
-    setUserProfile(null);
+    setUserRole('campaign_manager');
   };
 
   const toggleTheme = () => {
@@ -357,7 +512,13 @@ export default function App() {
 
   const handleDesignFile = (event) => {
     const file = event.target.files?.[0];
-    if (file) setDesignFileName(file.name);
+    if (file) {
+      setDesignFile(file);
+      setDesignFileName(file.name);
+      setCreativeAuditRun(false);
+      setCreativeFindings(null);
+      setDesignScanStatus('Ready to scan.');
+    }
   };
 
   const handleCalculateScore = () => {
@@ -366,18 +527,22 @@ export default function App() {
       return;
     }
 
-    const guidelineCheck = /renew|confirm|deadline|policy|coverage/i.test(emailCopy);
-    const hasClearCta = /\[(.*?)\]/.test(emailCopy) || /confirm|renew|review|book/i.test(emailCopy);
-    const strongSubject = subjectLine.length >= 20 && subjectLine.length <= 65;
-    const previewStrength = preHeader.length >= 20;
+    const hasClearCta = /\[(.*?)\]/.test(emailCopy) || /\b(start|shop|buy|register|subscribe|download|explore|discover|view|apply|donate|contact|reply|sign up|learn|book|confirm|renew|review|schedule|claim|try|get|request|visit)\b/i.test(emailCopy);
 
-    const evaluatedRules = rules.map((rule, index) => {
-      const pass = index % 3 !== 0;
+    const evaluatedRules = rules.map((rule) => {
+      const checkpoint = MANUAL_CHECKPOINTS.find((item) => item.ruleId === rule.id);
+      const pass = checkpoint ? manualChecks[checkpoint.id] : rule.id === 'r10' && hasClearCta;
       const status = pass ? 'pass' : 'warning';
-      const earned = status === 'pass' ? rule.weight : Math.max(1, Math.round(rule.weight * 0.6));
-      const reason = status === 'pass'
-        ? 'Clear compliance signal detected in the content and structure.'
-        : 'Content may need clearer instruction or a stronger action cue.';
+      const earned = pass ? rule.weight : 0;
+      const reason = checkpoint
+        ? pass
+          ? 'Confirmed by the reviewer using the manual checkpoint.'
+          : 'Not confirmed; this criterion cannot be verified from the submitted copy alone.'
+        : rule.id === 'r10'
+          ? pass
+            ? 'A possible call to action was found in the submitted copy; review its clarity and prominence.'
+            : 'No recognizable call to action was found in the submitted copy.'
+          : 'No verification method is configured for this criterion.';
 
       return {
         ...rule,
@@ -387,25 +552,9 @@ export default function App() {
       };
     });
 
-    const baseScore = Math.min(
-      98,
-      Math.max(
-        62,
-        Math.round(
-          (evaluatedRules.reduce((total, rule) => total + rule.earned, 0) /
-            evaluatedRules.reduce((total, rule) => total + rule.weight, 0)) *
-            100,
-        ),
-      ),
-    );
-
-    const score = Math.min(
-      100,
-      Math.max(
-        0,
-        baseScore + (guidelineCheck ? 2 : -5) + (hasClearCta ? 3 : -6) + (strongSubject ? 2 : -3) + (previewStrength ? 2 : -4),
-      ),
-    );
+    const totalWeight = evaluatedRules.reduce((total, rule) => total + rule.weight, 0);
+    const earnedWeight = evaluatedRules.reduce((total, rule) => total + rule.earned, 0);
+    const score = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0;
 
     const ratingBadge = score >= 85
       ? { label: 'Strong Match', bg: 'bg-emerald-500', text: 'text-white' }
@@ -418,12 +567,12 @@ export default function App() {
       ratingBadge,
       evaluatedRules,
       simulations: {
-        apple: 'Policy renewal reminder with clear action window and direct confirmation path.',
-        gemini: ['Renewal date front-loaded', 'CTA visible above the fold', 'Clear wording with minimal ambiguity'],
-        copilot: 'Primary action: confirm or renew before 28 February. Secondary details are secondary.',
-        extractedDate: '28 February 2027',
-        extractedAmount: 'Estimated premium review',
-        extractedCta: 'Confirm Renewal',
+        apple: 'Submitted email content reviewed for message clarity and primary action.',
+        gemini: ['Key message identified', 'Primary call to action assessed', 'Content clarity reviewed'],
+        copilot: 'Primary action and supporting details assessed from the submitted copy.',
+        extractedDate: 'Not detected',
+        extractedAmount: 'Not detected',
+        extractedCta: 'Not detected',
       },
     });
     setHasCalculated(true);
@@ -475,7 +624,10 @@ export default function App() {
                 className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 transition-all ${activeTab === 'methodology' ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
               >
                 <BookOpen className="h-3.5 w-3.5" />
-                <span>Current Methodologies</span>
+                <span className="flex items-center space-x-1">
+                  <span>Current Methodologies</span>
+                  {userRole === 'admin' ? <span className="h-1.5 w-1.5 rounded-full bg-[#FF002D]" title="Admin Edit Rights Active" /> : null}
+                </span>
               </button>
 
               <button
@@ -489,17 +641,6 @@ export default function App() {
             </nav>
 
             <div className="flex items-center space-x-2 pl-1">
-              {isCurrentUserAdmin ? (
-                <button
-                  type="button"
-                  onClick={() => setIsTeamModalOpen(true)}
-                  className="flex items-center space-x-1.5 rounded-lg border border-[#FF002D]/60 bg-[#741532]/20 px-2.5 py-1 text-[11px] font-bold text-[#FF002D] transition-all hover:bg-[#741532]/40"
-                >
-                  <ShieldCheck className="h-3 w-3" />
-                  <span>Team Access</span>
-                </button>
-              ) : null}
-
               {user && !user.isAnonymous ? (
                 <div className="flex items-center space-x-1.5">
                   <span className={`hidden max-w-[110px] truncate text-[11px] md:inline ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
@@ -604,46 +745,9 @@ export default function App() {
       <main className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
         {activeTab === 'studio' && (
           <div className="space-y-8">
-            <div className={`rounded-2xl border p-5 transition-all ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
-              <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div>
-                  <h2 className="flex items-center space-x-2 text-sm font-bold uppercase tracking-tight">
-                    <UploadCloud className="h-4 w-4 text-[#FF002D]" />
-                    <span>Upload Campaign Brief & Copy Documentation</span>
-                  </h2>
-                  <p className={`text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                    Upload client brief documents or use the quick sample loader to test scoring mechanics.
-                  </p>
-                </div>
-                <button type="button" onClick={handleLoadSampleTemplate} className={`self-start rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all sm:self-auto ${darkMode ? 'border-[#405E69] text-[#BFC9CE] hover:bg-[#405E69]/40' : 'border-[#BFC9CE] text-slate-700 hover:bg-slate-100'}`}>
-                  Load Sample Renewal Case
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className={`rounded-xl border-2 border-dashed p-4 text-center transition-all ${darkMode ? 'border-[#405E69] bg-[#002837]/60 hover:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 hover:border-slate-400'}`}>
-                  <input type="file" id="briefUploadInput" className="hidden" onChange={handleBriefFile} accept=".pdf,.docx,.txt" />
-                  <label htmlFor="briefUploadInput" className="block cursor-pointer space-y-1.5">
-                    <FileCode className="mx-auto h-6 w-6 text-[#80949B]" />
-                    <p className="text-xs font-semibold">{briefFileName ? briefFileName : 'Upload Client Brief (.pdf, .docx)'}</p>
-                    <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>Click to browse or drag file here</p>
-                  </label>
-                </div>
-
-                <div className={`rounded-xl border-2 border-dashed p-4 text-center transition-all ${darkMode ? 'border-[#405E69] bg-[#002837]/60 hover:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 hover:border-slate-400'}`}>
-                  <input type="file" id="copyUploadInput" className="hidden" onChange={handleCopyFile} accept=".docx,.txt,.html" />
-                  <label htmlFor="copyUploadInput" className="block cursor-pointer space-y-1.5">
-                    <FileText className="mx-auto h-6 w-6 text-[#80949B]" />
-                    <p className="text-xs font-semibold">{copyFileName ? copyFileName : 'Upload Copy Documentation (.docx, .txt)'}</p>
-                    <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>Click to browse or drag file here</p>
-                  </label>
-                </div>
-              </div>
-            </div>
-
             <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-              <div className="space-y-6 lg:col-span-6">
-                <div className={`space-y-4 rounded-2xl border p-5 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+              <div className="contents">
+                <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
                   <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <Building2 className="h-4 w-4" />
                     <span>Campaign Metadata & Objectives</span>
@@ -652,27 +756,51 @@ export default function App() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-xs font-medium">Client Name</label>
-                      <input type="text" placeholder="e.g. Vanguard Assurance" value={clientName} onChange={(e) => setClientName(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                      <input type="text" placeholder="e.g. Acme Group" value={clientName} onChange={(e) => setClientName(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-medium">Campaign Name</label>
-                      <input type="text" placeholder="e.g. Q1 Renewal Schedule" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                      <input type="text" placeholder="e.g. Spring Product Launch" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-xs font-medium">Target Audience Segment</label>
-                      <input type="text" placeholder="e.g. Premium policyholders" value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                      <input type="text" placeholder="e.g. New subscribers" value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
                     </div>
                     <div>
                       <label className="mb-1 block text-xs font-medium">Core Action / Desired Outcome</label>
-                      <input type="text" placeholder="e.g. Confirm renewal by deadline" value={coreGoal} onChange={(e) => setCoreGoal(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                      <input type="text" placeholder="e.g. Drive product trial signups" value={coreGoal} onChange={(e) => setCoreGoal(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
                     </div>
                   </div>
+
+                  <fieldset className="space-y-3 border-t border-[#405E69]/40 pt-4">
+                    <legend className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Manual Verification Checkpoints</legend>
+                    <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      Confirm these using your sending platform, DNS records, policy documentation, or rendered-email tests. Unchecked items receive no points.
+                    </p>
+                    <div className="grid grid-cols-1 gap-x-5 gap-y-2 sm:grid-cols-2">
+                      {MANUAL_CHECKPOINTS.map((checkpoint) => (
+                        <label key={checkpoint.id} className="flex items-start gap-2 border-b border-[#405E69]/30 pb-2 text-xs leading-relaxed">
+                          <input
+                            type="checkbox"
+                            checked={manualChecks[checkpoint.id]}
+                            onChange={(event) => {
+                              setManualChecks((current) => ({ ...current, [checkpoint.id]: event.target.checked }));
+                              setHasCalculated(false);
+                              setAuditResults(null);
+                            }}
+                            className="mt-0.5 shrink-0 accent-[#FF002D]"
+                          />
+                          <span>{checkpoint.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
                 </div>
 
-                <div className={`space-y-4 rounded-2xl border p-5 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+                <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
                   <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <Mail className="h-4 w-4" />
                     <span>Email Content & Headers</span>
@@ -685,7 +813,7 @@ export default function App() {
                         {subjectLine.length} chars (optimal 20–65)
                       </span>
                     </div>
-                    <input type="text" placeholder="e.g. Your policy renews on 1 March: Action required" value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                    <input type="text" placeholder="e.g. Discover what’s new this season" value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
                   </div>
 
                   <div>
@@ -695,28 +823,27 @@ export default function App() {
                         {preHeader.length} chars
                       </span>
                     </div>
-                    <input type="text" placeholder="e.g. Review your updated premium and confirm your renewal details before 28 Feb." value={preHeader} onChange={(e) => setPreHeader(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                    <input type="text" placeholder="e.g. Explore the latest updates and find your next step." value={preHeader} onChange={(e) => setPreHeader(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
                   </div>
 
                   <div>
                     <label className="mb-1 block text-xs font-medium">Full Email Copy (Live Text or HTML)</label>
                     <textarea rows={10} placeholder="Paste complete message body text or HTML code here..." value={emailCopy} onChange={(e) => setEmailCopy(e.target.value)} className={`w-full rounded-xl border p-3 text-xs font-mono leading-relaxed focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-slate-200 focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-800 focus:border-slate-500'}`} />
                   </div>
-                </div>
-
-                <div>
-                  <button type="button" onClick={handleCalculateScore} className="flex w-full items-center justify-center space-x-2 rounded-2xl border border-[#741532] bg-gradient-to-r from-[#741532] via-[#405E69] to-[#002837] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl transition-all hover:from-[#FF002D] hover:to-[#741532] transform hover:-translate-y-0.5 active:translate-y-0">
-                    <Zap className="h-4 w-4 fill-current text-[#FF002D]" />
-                    <span>Generate Readiness Score</span>
-                  </button>
-                  <p className={`mt-2 text-center text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                    Scores and AI inbox simulations are calculated strictly upon clicking this CTA.
-                  </p>
+                  <div className="border-t border-[#405E69]/40 pt-4">
+                    <button type="button" onClick={handleCalculateScore} className="flex w-full items-center justify-center space-x-2 rounded-2xl border border-[#741532] bg-gradient-to-r from-[#741532] via-[#405E69] to-[#002837] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl transition-all hover:from-[#FF002D] hover:to-[#741532] transform hover:-translate-y-0.5 active:translate-y-0">
+                      <Zap className="h-4 w-4 fill-current text-[#FF002D]" />
+                      <span>Generate Readiness Score</span>
+                    </button>
+                    <p className={`mt-2 text-center text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      Scores and AI inbox simulations are calculated strictly upon clicking this CTA.
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="lg:col-span-6">
-                {hasCalculated && auditResults ? (
+              {hasCalculated && auditResults && (
+                <div className="lg:col-span-12">
                   <div className={`space-y-6 rounded-2xl border p-6 transition-all ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
                     <div className="flex flex-col justify-between gap-4 border-b border-[#405E69]/50 pb-5 sm:flex-row sm:items-center">
                       <div>
@@ -807,16 +934,8 @@ export default function App() {
                       })}
                     </div>
                   </div>
-                ) : (
-                  <div className={`rounded-2xl border p-12 text-center ${darkMode ? 'border-[#405E69] bg-[#002837]/40' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
-                    <BarChart3 className={`mx-auto h-12 w-12 ${darkMode ? 'text-[#405E69]' : 'text-slate-300'}`} />
-                    <h3 className="mt-3 text-sm font-bold">Readiness Scoreboard Awaiting Audit</h3>
-                    <p className={`mx-auto mt-3 max-w-sm text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Fill in the campaign copy fields on the left and click <strong>"GENERATE READINESS SCORE"</strong> to produce the score breakdown.
-                    </p>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             <div className={`space-y-4 rounded-2xl border p-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
@@ -928,8 +1047,8 @@ export default function App() {
                 </div>
 
                 <div className="space-y-0.5 text-right text-xs text-slate-600">
-                  <p><strong className="text-slate-900">Client:</strong> {clientName || 'Vanguard Assurance'}</p>
-                  <p><strong className="text-slate-900">Campaign:</strong> {campaignName || 'Annual Policy Renewal'}</p>
+                  <p><strong className="text-slate-900">Client:</strong> {clientName || 'Not provided'}</p>
+                  <p><strong className="text-slate-900">Campaign:</strong> {campaignName || 'Not provided'}</p>
                   <p><strong className="text-slate-900">Audited Date:</strong> {new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
                 </div>
               </div>
@@ -952,9 +1071,9 @@ export default function App() {
                     This email was systematically tested against the 15 pillars of the 2027 Email Best Practices. With modern inboxes deploying automatic LLM summarizers, live-text clarity, clear deadlines, and single-intent actions are critical to prevent customer drop-off before opening.
                   </p>
                   <div className="flex items-center space-x-4 pt-2 text-xs font-semibold text-slate-600">
-                    <span>Target Goal: {coreGoal || 'Renewal Confirmation'}</span>
+                    <span>Target Goal: {coreGoal || 'Not provided'}</span>
                     <span>•</span>
-                    <span>Audience: {targetAudience || 'Segment A'}</span>
+                    <span>Audience: {targetAudience || 'Not provided'}</span>
                   </div>
                 </div>
               </div>
@@ -1011,6 +1130,9 @@ export default function App() {
                 <div className="flex items-center space-x-2">
                   <BookOpen className="h-5 w-5 text-[#80949B]" />
                   <h2 className="text-lg font-black tracking-tight">Current Methodologies & Knowledge Base</h2>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${userRole === 'admin' ? 'border-[#FF002D] bg-[#741532]/40 text-rose-300' : 'border-[#405E69] bg-[#405E69]/30 text-[#BFC9CE]'}`}>
+                    {userRole === 'admin' ? 'Editing Enabled' : 'View Only'}
+                  </span>
                 </div>
                 <p className={`mt-0.5 text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                   NotebookLM-style split workspace. Global methodology updates are synchronized in Firestore.
@@ -1018,7 +1140,7 @@ export default function App() {
               </div>
 
               <div className="flex items-center space-x-2 self-start md:self-auto">
-                {isCurrentUserAdmin ? (
+                {userRole === 'admin' ? (
                   <>
                     <button type="button" onClick={handleResetToDefaultMethodology} title="Reset rules to 2027 baseline" className={`rounded-xl border p-2 text-xs font-semibold transition-all ${darkMode ? 'border-[#405E69] text-[#80949B] hover:text-white' : 'border-[#BFC9CE] text-slate-600 hover:text-slate-900'}`}>
                       <RotateCcw className="h-4 w-4" />
@@ -1079,7 +1201,7 @@ export default function App() {
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Active Criteria & Scoring Weight Rules ({rules.length})</h3>
                   <div className="flex items-center space-x-3">
                     <span className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Total Max Weight: {rules.reduce((acc, r) => acc + r.weight, 0)} pts</span>
-                    {isCurrentUserAdmin && <span className="text-[10px] font-mono font-bold text-[#FF002D]">• Cloud-Synced</span>}
+                    {userRole === 'admin' && <span className="text-[10px] font-mono font-bold text-[#FF002D]">• Cloud-Synced</span>}
                   </div>
                 </div>
 
@@ -1099,7 +1221,7 @@ export default function App() {
 
                       <div className="flex shrink-0 items-center space-x-3">
                         <span className="rounded border border-[#741532] bg-[#741532]/30 px-2 py-1 font-mono text-xs font-bold text-[#BFC9CE]">{rule.weight} pts</span>
-                        {isCurrentUserAdmin ? (
+                        {userRole === 'admin' ? (
                           <button type="button" onClick={() => handleDeleteRule(rule.id)} className="p-1 text-[#80949B] transition-colors hover:text-[#FF002D]" title="Remove rule (Admin)">
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -1109,61 +1231,11 @@ export default function App() {
                       </div>
                     </div>
                   ))}
-                </div>
-
-                <div className={`space-y-2 rounded-xl border p-4 text-xs ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
-                  <span className="block text-[10px] font-bold uppercase text-[#80949B]">Selected Source Detail</span>
-                  <h4 className="font-bold">{selectedSource.title}</h4>
-                  <p className={`leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-600'}`}>{selectedSource.snippet}</p>
-                </div>
-              </div>
-
-              <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-8 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
-                <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Active Criteria & Scoring Weight Rules ({rules.length})</h3>
-                  <div className="flex items-center space-x-3">
-                    <span className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Total Max Weight: {rules.reduce((acc, r) => acc + r.weight, 0)} pts</span>
-                    {isCurrentUserAdmin && <span className="text-[10px] font-mono font-bold text-[#FF002D]">• Cloud-Synced</span>}
-                  </div>
-                </div>
-
-                <div className="space-y-2.5">
-                  {rules.map((rule) => (
-                    <div key={rule.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-xs transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] hover:border-[#80949B]' : 'border-[#BFC9CE] bg-white hover:border-slate-400'}`}>
-                      <div className="flex items-center space-x-3">
-                        <span className="rounded bg-[#405E69] px-2 py-1 text-xs font-black text-white">{rule.code}</span>
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-bold">{rule.title}</h4>
-                            <span className="rounded-full bg-[#405E69]/30 px-2 py-0.5 text-[10px] text-[#BFC9CE]">{rule.pillar}</span>
-                          </div>
-                          <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{rule.desc}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 items-center space-x-3">
-                        <span className="rounded border border-[#741532] bg-[#741532]/30 px-2 py-1 font-mono text-xs font-bold text-[#BFC9CE]">{rule.weight} pts</span>
-                        {isCurrentUserAdmin ? (
-                          <button type="button" onClick={() => handleDeleteRule(rule.id)} className="p-1 text-[#80949B] transition-colors hover:text-[#FF002D]" title="Remove rule (Admin)">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        ) : (
-                          <span title="Read-only criteria"><Lock className="h-3.5 w-3.5 text-[#80949B]" /></span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className={`space-y-2 rounded-xl border p-4 text-xs ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
-                  <span className="block text-[10px] font-bold uppercase text-[#80949B]">Selected Source Detail</span>
-                  <h4 className="font-bold">{selectedSource.title}</h4>
-                  <p className={`leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-600'}`}>{selectedSource.snippet}</p>
                 </div>
               </div>
             </div>
 
-            {isAddRuleModalOpen && isCurrentUserAdmin && (
+            {isAddRuleModalOpen && userRole === 'admin' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                 <div className={`w-full max-w-md space-y-4 rounded-2xl border p-6 shadow-2xl transition-all ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-white text-slate-900'}`}>
                   <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
@@ -1221,42 +1293,43 @@ export default function App() {
                 <h2 className="text-lg font-black tracking-tight">Creative Review & CI Adherence Studio</h2>
               </div>
               <p className={`mt-1 text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                Audit final design exports against the uploaded brief, CI guide colors, and CTA phrasing clarity (e.g. "explore" vs "see more").
+                Scan the final email design for visible copy and colors, then compare the results with the client design brief and final subject details.
               </p>
             </div>
 
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
               <div className={`space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Design Export & CI Guidelines</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Final Email Design & Client Brief</h3>
 
                 <div className={`rounded-xl border-2 border-dashed p-5 text-center ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
-                  <input type="file" id="designUploadInput" className="hidden" onChange={handleDesignFile} accept="image/*,.pdf" />
+                  <input type="file" id="designUploadInput" className="hidden" onChange={handleDesignFile} accept="image/png,image/jpeg,image/webp,image/svg+xml,.pdf" />
                   <label htmlFor="designUploadInput" className="block cursor-pointer space-y-2">
                     <Eye className="mx-auto h-6 w-6 text-[#80949B]" />
-                    <p className="text-xs font-semibold">{designFileName ? designFileName : 'Upload Final Export Render (.png, .jpg, .pdf)'}</p>
-                    <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>Drop final client creative render here</p>
+                    <p className="text-xs font-semibold">{designFileName || 'Upload Final Email Design (.png, .jpg, .webp, .svg, .pdf)'}</p>
+                    <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>The design is scanned in this browser; the file is not uploaded to a server.</p>
                   </label>
                 </div>
+                {designScanStatus && <p className={`text-[11px] ${designScanStatus.startsWith('The design could not') || designScanStatus.startsWith('Upload') ? 'text-rose-400' : darkMode ? 'text-[#80949B]' : 'text-slate-500'}`} role="status">{designScanStatus}</p>}
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium">Brand CI Guidelines & Color Rules</label>
-                  <textarea rows={3} placeholder="e.g. Primary Navy (#002837), Accent Red (#FF002D) used strictly for CTA buttons. Minimum 16px body copy." value={ciGuideContent} onChange={(e) => setCiGuideContent(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs font-mono focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
+                  <label className="mb-1 block text-xs font-medium">Client Design Brief</label>
+                  <textarea rows={4} placeholder="Describe the intended layout, brand colors (include hex values), typography, imagery, accessibility needs, and CTA treatment." value={designBriefContent} onChange={(e) => setDesignBriefContent(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block font-medium">Updated Final Subject (if modified)</label>
-                    <input type="text" placeholder="e.g. Policy Renewal Notice" value={creativeSubject} onChange={(e) => setCreativeSubject(e.target.value)} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
+                    <label className="mb-1 block font-medium">Final Subject (for comparison)</label>
+                    <input type="text" placeholder="e.g. Product Update Announcement" value={creativeSubject} onChange={(e) => setCreativeSubject(e.target.value)} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
                   </div>
                   <div>
-                    <label className="mb-1 block font-medium">Updated Final Pre-Header</label>
+                    <label className="mb-1 block font-medium">Final Pre-Header (for comparison)</label>
                     <input type="text" placeholder="e.g. Action required by 28 Feb" value={creativePreheader} onChange={(e) => setCreativePreheader(e.target.value)} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
                   </div>
                 </div>
 
-                <button type="button" onClick={handleRunCreativeReview} className="flex w-full items-center justify-center space-x-2 rounded-xl bg-[#405E69] px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow">
+                <button type="button" onClick={handleRunCreativeReview} disabled={isScanningDesign} className="flex w-full items-center justify-center space-x-2 rounded-xl bg-[#405E69] px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow disabled:cursor-wait disabled:opacity-60">
                   <Target className="h-4 w-4" />
-                  <span>Run Creative & CI Alignment Review</span>
+                  <span>{isScanningDesign ? 'Scanning Final Design...' : 'Run Creative & CI Alignment Review'}</span>
                 </button>
               </div>
 
@@ -1267,16 +1340,19 @@ export default function App() {
                   <div className="space-y-4 text-xs animate-fadeIn">
                     <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
                       <div>
-                        <span className={`text-[10px] font-bold uppercase ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Brand CI Alignment Index</span>
-                        <div className="mt-0.5 text-3xl font-black text-emerald-400">{creativeFindings.ciScore}%</div>
+                        <span className={`text-[10px] font-bold uppercase ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Final Design Scan</span>
+                        <div className="mt-1 text-xs font-semibold">{designFileName}</div>
+                        <p className={`mt-1 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                          {creativeFindings.pagesScanned} page(s), {creativeFindings.wordCount} words detected
+                        </p>
                       </div>
-                      <span className="rounded-full border border-emerald-500/40 bg-emerald-500/20 px-3 py-1 text-xs font-bold text-emerald-300">Design Approved</span>
+                      <span className="text-right text-xs font-bold">{creativeFindings.confidence}%<span className="block text-[10px] font-medium text-[#80949B]">OCR confidence</span></span>
                     </div>
 
                     <div className={`space-y-1.5 rounded-xl border p-4 ${darkMode ? 'border-[#741532] bg-[#4D1B34]/30' : 'border-rose-200 bg-rose-50'}`}>
                       <span className="flex items-center space-x-1.5 text-xs font-bold text-rose-300">
                         <Target className="h-3.5 w-3.5 text-[#FF002D]" />
-                        <span>Actionable CTA Wording Recommendation</span>
+                        <span>CTA Detected in Design</span>
                       </span>
                       <p className="leading-relaxed">{creativeFindings.ctaRecommendation}</p>
                     </div>
@@ -1293,24 +1369,31 @@ export default function App() {
                       <div className={`flex items-start space-x-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                         <div>
-                          <strong className="block">CTA Placement & Mobile Hierarchy:</strong>
-                          <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{creativeFindings.positionAssessment}</p>
+                          <strong className="block">Subject & Pre-Header Match:</strong>
+                          <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{creativeFindings.contentMatch}</p>
                         </div>
                       </div>
 
                       <div className={`flex items-start space-x-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                         <div>
-                          <strong className="block">Uploaded Brief Verification:</strong>
-                          <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{briefFileName ? `Cross-referenced with "${briefFileName}" requirements.` : 'Brief document alignment verified against core objectives.'}</p>
+                          <strong className="block">Sampled Design Palette:</strong>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {creativeFindings.detectedColors.map((color) => <span key={color} className="h-5 w-5 rounded border border-white/30" style={{ backgroundColor: color }} title={color} />)}
+                            <span className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{creativeFindings.colorAdherence}</span>
+                          </div>
                         </div>
                       </div>
+                      <details className={`rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                        <summary className="cursor-pointer text-xs font-semibold">View text detected in the final design</summary>
+                        <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed">{creativeFindings.recognizedText}</pre>
+                      </details>
                     </div>
                   </div>
                 ) : (
                   <div className={`rounded-xl border border-dashed p-8 text-center ${darkMode ? 'border-[#405E69] text-[#80949B]' : 'border-[#BFC9CE] text-slate-400'}`}>
                     <MousePointer className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                    <p className="text-xs">Enter CI rules and design parameters on the left, then run the audit to review CTA phrasing and brand compliance.</p>
+                    <p className="text-xs">Upload the final email design, add the client brief and final subject details, then run the scan to inspect detected copy and colors.</p>
                   </div>
                 )}
               </div>

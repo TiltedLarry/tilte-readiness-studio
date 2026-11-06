@@ -128,6 +128,8 @@ export default function App() {
   const [designFile, setDesignFile] = useState(null);
   const [designFileName, setDesignFileName] = useState('');
   const [designPreviewUrl, setDesignPreviewUrl] = useState('');
+  const [styleGuideFile, setStyleGuideFile] = useState(null);
+  const [styleGuideFileName, setStyleGuideFileName] = useState('');
   const [designScanStatus, setDesignScanStatus] = useState('');
   const [isScanningDesign, setIsScanningDesign] = useState(false);
   const [creativeSubject, setCreativeSubject] = useState('');
@@ -324,52 +326,68 @@ export default function App() {
 
     let worker;
     try {
-      const canvases = [];
-      if (designFile.type === 'application/pdf' || designFile.name.toLowerCase().endsWith('.pdf')) {
-        const pdfjs = await import('pdfjs-dist');
-        const pdfWorker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-        pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker.default;
-        const pdf = await pdfjs.getDocument({ data: await designFile.arrayBuffer() }).promise;
-        const pageCount = Math.min(pdf.numPages, 10);
-        for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-          setDesignScanStatus(`Rendering PDF page ${pageNumber} of ${pageCount}...`);
-          const page = await pdf.getPage(pageNumber);
-          const baseViewport = page.getViewport({ scale: 1 });
-          const viewport = page.getViewport({ scale: Math.min(1.5, 1600 / Math.max(baseViewport.width, baseViewport.height)) });
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.ceil(viewport.width);
-          canvas.height = Math.ceil(viewport.height);
-          await page.render({ canvas, canvasContext: canvas.getContext('2d', { willReadFrequently: true }), viewport }).promise;
-          canvases.push(canvas);
+      const renderFilePages = async (file, label) => {
+        const pages = [];
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          const pdfjs = await import('pdfjs-dist');
+          const pdfWorker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+          pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker.default;
+          const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+          const pageCount = Math.min(pdf.numPages, 10);
+          for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+            setDesignScanStatus(`Rendering ${label} PDF page ${pageNumber} of ${pageCount}...`);
+            const page = await pdf.getPage(pageNumber);
+            const baseViewport = page.getViewport({ scale: 1 });
+            const viewport = page.getViewport({ scale: Math.min(1.5, 1600 / Math.max(baseViewport.width, baseViewport.height)) });
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.ceil(viewport.width);
+            canvas.height = Math.ceil(viewport.height);
+            await page.render({ canvas, canvasContext: canvas.getContext('2d', { willReadFrequently: true }), viewport }).promise;
+            pages.push(canvas);
+          }
+          if (pdf.numPages > pageCount) {
+            setDesignScanStatus(`Scanning the first ${pageCount} of ${pdf.numPages} ${label} PDF pages...`);
+          }
+        } else if (file.type.startsWith('image/')) {
+          const imageUrl = URL.createObjectURL(file);
+          try {
+            const image = new Image();
+            image.src = imageUrl;
+            await image.decode();
+            const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+            canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, canvas.width, canvas.height);
+            pages.push(canvas);
+          } finally {
+            URL.revokeObjectURL(imageUrl);
+          }
+        } else {
+          throw new Error(`Use a PNG, JPG, WEBP, SVG, or PDF for the ${label}.`);
         }
-        if (pdf.numPages > pageCount) {
-          setDesignScanStatus(`Scanning the first ${pageCount} of ${pdf.numPages} PDF pages...`);
-        }
-      } else if (designFile.type.startsWith('image/')) {
-        const imageUrl = URL.createObjectURL(designFile);
+        return pages;
+      };
+
+      const canvases = await renderFilePages(designFile, 'final design');
+      let styleGuideCanvases = [];
+      let styleGuideError = '';
+      if (styleGuideFile) {
         try {
-          const image = new Image();
-          image.src = imageUrl;
-          await image.decode();
-          const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-          canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-          canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, canvas.width, canvas.height);
-          canvases.push(canvas);
-        } finally {
-          URL.revokeObjectURL(imageUrl);
+          styleGuideCanvases = await renderFilePages(styleGuideFile, 'style guide');
+        } catch (error) {
+          styleGuideError = error.message || 'The style guide could not be scanned.';
         }
-      } else {
-        throw new Error('Use a PNG, JPG, WEBP, SVG, or PDF export for the design scan.');
       }
 
       const { createWorker } = await import('tesseract.js');
       worker = await createWorker('eng');
       const recognizedPages = [];
+      const styleGuideRecognizedPages = [];
       const ctaCandidates = [];
       const visualCtaCandidates = [];
       const colorCounts = new Map();
+      const styleGuideColorCounts = new Map();
       let totalConfidence = 0;
       const ctaPattern = /\b(start|shop|buy|register|subscribe|download|explore|discover|view|apply|donate|contact|reply|sign\s*up|learn|book|confirm|renew|review|schedule|claim|try|get|request|visit)\b/i;
 
@@ -437,7 +455,26 @@ export default function App() {
         }
       }
 
+      for (const [index, canvas] of styleGuideCanvases.entries()) {
+        setDesignScanStatus(`Scanning style guide page ${index + 1} of ${styleGuideCanvases.length}...`);
+        const result = await worker.recognize(canvas, {}, { blocks: true, tsv: true });
+        styleGuideRecognizedPages.push(result.data.text.trim());
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
+        const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 40000)));
+        for (let y = 0; y < height; y += step) {
+          for (let x = 0; x < width; x += step) {
+            const pixelIndex = (y * width + x) * 4;
+            if (data[pixelIndex + 3] < 180) continue;
+            const rgb = [data[pixelIndex], data[pixelIndex + 1], data[pixelIndex + 2]];
+            const hex = `#${rgb.map((channel) => Math.min(255, Math.floor(channel / 16) * 16 + 8).toString(16).padStart(2, '0')).join('')}`;
+            styleGuideColorCounts.set(hex, (styleGuideColorCounts.get(hex) || 0) + 1);
+          }
+        }
+      }
+
       const recognizedText = recognizedPages.filter(Boolean).join('\n\n');
+      const styleGuideText = styleGuideRecognizedPages.filter(Boolean).join('\n\n');
       const lines = recognizedText.split(/\n+/).map((line) => line.trim()).filter(Boolean);
       const fallbackCta = lines.find((line) => ctaPattern.test(line)) || '';
       const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -534,19 +571,39 @@ export default function App() {
         .sort((left, right) => right[1] - left[1])
         .slice(0, 8)
         .map(([hex]) => hex);
-      const expectedColors = [...new Set(designBriefContent.match(/#[0-9a-f]{6}\b/gi) || [])];
+      const typedGuideColors = designBriefContent.match(/#[0-9a-f]{6}\b/gi) || [];
+      const extractedGuideColors = styleGuideText.match(/#[0-9a-f]{6}\b/gi) || [];
+      const styleGuidePixelCount = [...styleGuideColorCounts.values()].reduce((sum, count) => sum + count, 0);
+      const sampledGuideColors = [...styleGuideColorCounts.entries()]
+        .map(([hex, count]) => ({ hex, count, channels: hex.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16)) }))
+        .filter(({ channels, count }) => Math.max(...channels) - Math.min(...channels) >= 42 && count / Math.max(1, styleGuidePixelCount) >= 0.01)
+        .sort((left, right) => right.count - left.count)
+        .slice(0, 8)
+        .map(({ hex }) => hex);
+      const colorDistance = (left, right) => {
+        const leftRgb = left.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
+        const rightRgb = right.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
+        return Math.sqrt(leftRgb.reduce((sum, channel, index) => sum + (channel - rightRgb[index]) ** 2, 0));
+      };
+      const expectedColors = [];
+      for (const candidate of [...typedGuideColors, ...extractedGuideColors, ...sampledGuideColors]) {
+        if (!expectedColors.some((color) => colorDistance(color, candidate) <= 48)) expectedColors.push(candidate);
+      }
       const matchedColors = expectedColors.filter((expected) => {
-        const expectedRgb = expected.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
-        return detectedColors.some((detected) => {
-          const detectedRgb = detected.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
-          const distance = Math.sqrt(expectedRgb.reduce((sum, channel, channelIndex) => sum + (channel - detectedRgb[channelIndex]) ** 2, 0));
-          return distance <= 48;
-        });
+        return detectedColors.some((detected) => colorDistance(expected, detected) <= 48);
       });
+      const styleGuideMatchScore = expectedColors.length
+        ? Math.round((matchedColors.length / expectedColors.length) * 100)
+        : null;
       const vagueCta = callToAction && /click here|learn more|explore more|find out more/i.test(callToAction);
 
       setCreativeFindings({
         pagesScanned: canvases.length,
+        styleGuidePagesScanned: styleGuideCanvases.length,
+        styleGuideFileName,
+        styleGuideError,
+        styleGuideText: styleGuideText || (styleGuideFile ? 'No readable style-guide text was detected.' : ''),
+        styleGuideMatchScore,
         wordCount: recognizedText.split(/\s+/).filter(Boolean).length,
         confidence: Math.round(totalConfidence / canvases.length),
         recognizedText: recognizedText || 'No readable text was detected in the uploaded design.',
@@ -557,8 +614,8 @@ export default function App() {
         ctaText: callToAction || (ctaButton?.buttonLike ? 'Button-like block detected; CTA label not readable' : 'No CTA text detected'),
         ctaButton,
         colorAdherence: expectedColors.length
-          ? `${matchedColors.length} of ${expectedColors.length} brief colors were found in the sampled design palette.`
-          : 'No hex colors were specified in the client design brief, so palette matching was not assessed.',
+          ? `${matchedColors.length} of ${expectedColors.length} reference colors were found in the final design palette.`
+          : 'No usable colors were found in the style guide or typed brief, so palette matching was not assessed.',
         ctaRecommendation: callToAction
           ? vagueCta
             ? `The scan found "${callToAction}". Consider replacing it with a specific action tied to the campaign goal.`
@@ -574,7 +631,7 @@ export default function App() {
       setCreativeAuditRun(true);
       setDesignScanStatus('Design scan complete.');
     } catch (error) {
-      setDesignScanStatus(error.message || 'The design could not be scanned.');
+      setDesignScanStatus(`Scan failed: ${error.message || 'The design could not be scanned.'}`);
     } finally {
       if (worker) await worker.terminate();
       setIsScanningDesign(false);
@@ -663,6 +720,17 @@ export default function App() {
       setCreativeAuditRun(false);
       setCreativeFindings(null);
       setDesignScanStatus('Ready to scan.');
+    }
+  };
+
+  const handleStyleGuideFile = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setStyleGuideFile(file);
+      setStyleGuideFileName(file.name);
+      setCreativeAuditRun(false);
+      setCreativeFindings(null);
+      setDesignScanStatus('Style guide ready to compare.');
     }
   };
 
@@ -945,7 +1013,7 @@ export default function App() {
                 )}
 
                 {auditStep === 'verification' && (
-                <div className={`section-card rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+                <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Manual Verification Checkpoints</h3>
                   <p className={`text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                     Confirm these using your sending platform, DNS records, policy documentation, or rendered-email tests. Unchecked items receive no points.
@@ -971,7 +1039,7 @@ export default function App() {
                 )}
 
                 {auditStep === 'content' && (
-                <div className={`section-card rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+                <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                   <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <Mail className="h-4 w-4" />
                     <span>Email Content & Headers</span>
@@ -1016,7 +1084,7 @@ export default function App() {
 
               {hasCalculated && auditResults && (
                 <div className="lg:col-span-12">
-                  <div className={`section-card rounded-2xl border p-5 transition-all ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+                  <div className={`section-card space-y-4 rounded-2xl border p-5 transition-all ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                     <div className="flex flex-col justify-between gap-4 border-b border-[#405E69]/50 pb-5 sm:flex-row sm:items-center">
                       <div>
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Tilte Readiness Scorecard</span>
@@ -1110,7 +1178,7 @@ export default function App() {
               )}
             </div>
 
-            <div className={`section-card rounded-2xl border p-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+            <div className={`section-card space-y-4 rounded-2xl border p-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
               <div className="flex flex-col justify-between gap-3 border-b border-[#405E69]/40 pb-4 md:flex-row md:items-center">
                 <div className="flex items-center space-x-2.5">
                   <div className="rounded-xl border border-[#741532] bg-[#4D1B34] p-2 text-white">
@@ -1340,7 +1408,7 @@ export default function App() {
             )}
 
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-              <div className={`section-card rounded-2xl border p-5 lg:col-span-4 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+              <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-4 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                 <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
                   <h3 className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <FileText className="h-4 w-4" />
@@ -1368,7 +1436,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className={`section-card rounded-2xl border p-5 lg:col-span-8 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+              <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-8 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                 <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Active Criteria & Scoring Weight Rules ({rules.length})</h3>
                   <div className="flex items-center space-x-3">
@@ -1470,7 +1538,7 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-              <div className={`section-card rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+              <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Final Email Design & Client Brief</h3>
 
                 <div className={`rounded-xl border-2 border-dashed p-5 text-center ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
@@ -1481,7 +1549,7 @@ export default function App() {
                     <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>The design is scanned in this browser; the file is not uploaded to a server.</p>
                   </label>
                 </div>
-                {designScanStatus && <p className={`text-[11px] ${designScanStatus.startsWith('The design could not') || designScanStatus.startsWith('Upload') ? 'text-rose-400' : darkMode ? 'text-[#80949B]' : 'text-slate-500'}`} role="status">{designScanStatus}</p>}
+                {designScanStatus && <p className={`text-[11px] ${designScanStatus.startsWith('Scan failed') || designScanStatus.startsWith('Upload') ? 'text-rose-400' : darkMode ? 'text-[#80949B]' : 'text-slate-500'}`} role="status">{designScanStatus}</p>}
 
                 {designPreviewUrl && (
                   <div className={`overflow-hidden rounded-xl border ${darkMode ? 'border-[#405E69] bg-[#001D29]' : 'border-[#BFC9CE] bg-slate-100'}`}>
@@ -1499,6 +1567,14 @@ export default function App() {
                 <div>
                   <label className="mb-1 block text-xs font-medium">Client Design Brief</label>
                   <textarea rows={4} placeholder="Describe the intended layout, brand colors (include hex values), typography, imagery, accessibility needs, and CTA treatment." value={designBriefContent} onChange={(e) => setDesignBriefContent(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
+                </div>
+
+                <div className={`rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <label htmlFor="styleGuideUploadInput" className="mb-2 block text-xs font-medium">Style Guide Reference (optional)</label>
+                  <input id="styleGuideUploadInput" type="file" onChange={handleStyleGuideFile} accept="image/png,image/jpeg,image/webp,image/svg+xml,.pdf" className={`block w-full text-[11px] file:mr-3 file:rounded-md file:border-0 file:bg-[#405E69] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white ${darkMode ? 'text-[#BFC9CE]' : 'text-slate-600'}`} />
+                  <p className={`mt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                    {styleGuideFileName || 'Upload a PDF or image guide to compare its palette and visible standards with the final design.'}
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
@@ -1521,7 +1597,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className={`section-card rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+              <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Creative Review Audit Results</h3>
 
                 {creativeAuditRun && creativeFindings ? (
@@ -1539,7 +1615,25 @@ export default function App() {
                         <span className="block text-[10px] font-medium text-[#80949B]">OCR confidence</span>
                         <span className="mt-1 block text-lg font-black">{creativeFindings.briefAlignmentScore === null ? 'N/A' : `${creativeFindings.briefAlignmentScore}%`}</span>
                         <span className="block text-[10px] font-medium text-[#80949B]">Brief copy alignment</span>
+                        <span className="mt-1 block text-lg font-black">{creativeFindings.styleGuideMatchScore === null ? 'N/A' : `${creativeFindings.styleGuideMatchScore}%`}</span>
+                        <span className="block text-[10px] font-medium text-[#80949B]">Reference palette match</span>
                       </div>
+                    </div>
+
+                    <div className={`space-y-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                      <strong className="block">Style Guide Reference</strong>
+                      <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                        {creativeFindings.styleGuideFileName
+                          ? `${creativeFindings.styleGuideFileName} · ${creativeFindings.styleGuidePagesScanned} page(s) scanned. ${creativeFindings.colorAdherence}`
+                          : creativeFindings.colorAdherence}
+                      </p>
+                      {creativeFindings.styleGuideError && <p className="text-[11px] text-amber-400">Style guide skipped: {creativeFindings.styleGuideError}</p>}
+                      {creativeFindings.styleGuideText && (
+                        <details>
+                          <summary className="cursor-pointer text-[11px] font-semibold">View text detected in style guide</summary>
+                          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[10px] leading-relaxed">{creativeFindings.styleGuideText}</pre>
+                        </details>
+                      )}
                     </div>
 
                     <div className={`space-y-1.5 rounded-xl border p-4 ${darkMode ? 'border-[#741532] bg-[#4D1B34]/30' : 'border-rose-200 bg-rose-50'}`}>
@@ -1567,10 +1661,9 @@ export default function App() {
                       <div className={`flex items-start space-x-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                         <div>
-                          <strong className="block">Sampled Design Palette:</strong>
+                          <strong className="block">Final Design Palette:</strong>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5">
                             {creativeFindings.detectedColors.map((color) => <span key={color} className="h-5 w-5 rounded border border-white/30" style={{ backgroundColor: color }} title={color} />)}
-                            <span className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{creativeFindings.colorAdherence}</span>
                           </div>
                         </div>
                       </div>

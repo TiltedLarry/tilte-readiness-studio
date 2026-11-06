@@ -41,13 +41,13 @@ select {
 }
 
 .section-card {
-  background-color: #002837 !important;
+  background-color: #062c3b !important;
   border-color: rgba(128, 148, 155, 0.15) !important;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
 }
 
 .section-card-light {
-  background-color: #f8fafc !important;
+  background-color: #fafcfe !important;
   border-color: rgba(148, 163, 184, 0.15) !important;
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
 }

@@ -913,7 +913,7 @@ export default function App() {
             <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
               <div className="contents">
                 {auditStep === 'metadata' && (
-                <div className={`section-card rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+                <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
                   <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <Building2 className="h-4 w-4" />
                     <span>Campaign Metadata & Objectives</span>

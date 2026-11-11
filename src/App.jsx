@@ -1462,12 +1462,12 @@ export default function App() {
   const teamPermissionsOpen = () => setIsTeamModalOpen(true);
 
   return (
-    <div className={`min-h-screen font-sans transition-colors duration-200 ${darkMode ? 'bg-[#002837] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
-      <header className={`border-b sticky top-0 z-40 backdrop-blur-md transition-colors ${darkMode ? 'bg-[#002837]/90 border-[#405E69]/60' : 'bg-white/95 border-[#BFC9CE]'}`}>
+    <div className={`min-h-screen font-sans transition-colors duration-200 ${darkMode ? 'bg-[#001D27] text-slate-100' : 'bg-[#EEF1F6] text-slate-900'}`}>
+      <header className={`sticky top-0 z-40 backdrop-blur-md transition-colors ${darkMode ? 'bg-[#001D27]/90 text-slate-100 border-b border-white/5' : 'bg-white/90 text-slate-900 border-b border-slate-200/40 shadow-xs'}`}>
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center space-x-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#741532] bg-[#4D1B34] shadow-md">
-              <span className="text-base font-black tracking-tighter text-white">T</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#4D1B34] text-white shadow-sm">
+              <span className="text-base font-black tracking-tighter">T</span>
             </div>
             <div>
               <div className="flex items-center space-x-2">
@@ -1480,7 +1480,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-2 sm:space-x-3">
-            <nav className={`flex rounded-xl border p-1 text-xs font-semibold sm:text-sm ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-100'}`}>
+            <nav className={`flex rounded-xl p-1 text-xs font-semibold sm:text-sm ${darkMode ? 'bg-[#062D3C]' : 'bg-[#E2E7EE]'}`}>
               <button
                 type="button"
                 onClick={() => setActiveTab('studio')}
@@ -1527,12 +1527,12 @@ export default function App() {
                   <span className={`hidden max-w-[110px] truncate text-[11px] md:inline ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                     {user.email}
                   </span>
-                  <button type="button" onClick={handleSignOut} title="Sign Out" className={`rounded-lg border p-1.5 transition-colors ${darkMode ? 'border-[#405E69] text-[#80949B] hover:text-white' : 'border-[#BFC9CE] text-slate-600 hover:text-slate-900'}`}>
+                  <button type="button" onClick={handleSignOut} title="Sign Out" className={`rounded-xl p-1.5 transition-colors ${darkMode ? 'bg-[#062D3C] text-[#80949B] hover:text-white' : 'bg-white text-slate-600 hover:text-slate-900 shadow-xs'}`}>
                     <LogOut className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ) : (
-                <button type="button" onClick={() => setShowAuthModal(true)} className="rounded-lg border border-[#741532] bg-[#405E69] px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-[#741532]">
+                <button type="button" onClick={() => setShowAuthModal(true)} className="rounded-xl bg-[#405E69] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#741532] shadow-sm">
                   Sign In
                 </button>
               )}
@@ -1541,7 +1541,7 @@ export default function App() {
                 type="button"
                 aria-label="Toggle theme"
                 onClick={toggleTheme}
-                className={`rounded-xl border p-2 transition-all ${darkMode ? 'border-[#405E69] bg-[#002837] text-amber-300 hover:bg-[#405E69]/50' : 'border-[#BFC9CE] bg-white text-slate-700 hover:bg-slate-100 shadow-sm'}`}
+                className={`rounded-xl p-2 transition-all ${darkMode ? 'bg-[#062D3C] text-amber-300 hover:bg-[#08384b]' : 'bg-white text-slate-700 hover:bg-slate-100 shadow-xs'}`}
               >
                 {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
@@ -1551,21 +1551,21 @@ export default function App() {
       </header>
 
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className={`w-full max-w-sm space-y-4 rounded-2xl border p-6 shadow-2xl transition-all ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-white text-slate-900'}`}>
-            <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className={`w-full max-w-sm space-y-4 rounded-2xl p-6 shadow-2xl transition-all ${darkMode ? 'bg-[#072E3D] text-white' : 'bg-white text-slate-900'}`}>
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-3">
               <div>
                 <h3 className="text-sm font-bold">{authMode === 'login' ? 'Tilte Team Authentication' : 'Create Campaign Studio Account'}</h3>
                 <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                   Connect for real-time Firestore sync & role governance.
                 </p>
               </div>
-              <button type="button" onClick={() => setShowAuthModal(false)} className="text-slate-400 hover:text-white">
+              <button type="button" onClick={() => setShowAuthModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {authError && <div className="rounded-lg border border-[#FF002D] bg-[#FF002D]/10 p-2.5 text-xs text-[#FF002D]">{authError}</div>}
+            {authError && <div className="rounded-xl bg-[#FF002D]/10 p-2.5 text-xs text-[#FF002D]">{authError}</div>}
 
             <form onSubmit={handleAuthSubmit} className="space-y-3 text-xs">
               <div>
@@ -1576,7 +1576,7 @@ export default function App() {
                   placeholder="name@tilte.com"
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`}
+                  className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 transition-colors ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`}
                 />
               </div>
 
@@ -1588,28 +1588,28 @@ export default function App() {
                   placeholder="••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`}
+                  className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 transition-colors ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`}
                 />
               </div>
 
-              <button type="submit" className="w-full rounded-xl bg-[#405E69] py-2.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow">
+              <button type="submit" className="w-full rounded-xl bg-[#405E69] py-3 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow-sm">
                 {authMode === 'login' ? 'Sign In' : 'Register Account'}
               </button>
             </form>
 
             <div className="relative py-1">
               <div className="absolute inset-0 flex items-center">
-                <div className={`w-full border-t ${darkMode ? 'border-[#405E69]' : 'border-slate-200'}`} />
+                <div className={`w-full border-t ${darkMode ? 'border-white/10' : 'border-slate-100'}`} />
               </div>
               <div className="relative flex justify-center text-[10px] uppercase">
-                <span className={`px-2 ${darkMode ? 'bg-[#002837] text-[#80949B]' : 'bg-white text-slate-400'}`}>Or</span>
+                <span className={`px-2 ${darkMode ? 'bg-[#072E3D] text-[#80949B]' : 'bg-white text-slate-400'}`}>Or</span>
               </div>
             </div>
 
             <button
               type="button"
               onClick={handleGoogleSignIn}
-              className={`flex w-full items-center justify-center space-x-2 rounded-xl border py-2.5 text-xs font-semibold transition-colors ${darkMode ? 'border-[#405E69] text-white hover:bg-[#405E69]/30' : 'border-[#BFC9CE] text-slate-800 hover:bg-slate-100'}`}
+              className={`flex w-full items-center justify-center space-x-2 rounded-xl border-0 py-2.5 text-xs font-semibold transition-colors ${darkMode ? 'bg-[#002230] text-white hover:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-800 hover:bg-[#E9EEF4]'}`}
             >
               <span>Sign in with Google</span>
             </button>
@@ -1626,7 +1626,7 @@ export default function App() {
       <main className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
         {activeTab === 'studio' && (
           <div className="space-y-8">
-            <div className={`grid grid-cols-3 rounded-xl border p-1 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-100'}`} role="tablist" aria-label="Audit steps">
+            <div className={`grid grid-cols-3 rounded-2xl p-1.5 transition-colors shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`} role="tablist" aria-label="Audit steps">
               {[
                 { id: 'metadata', label: 'Campaign Metadata & Objectives', number: '01' },
                 { id: 'verification', label: 'Manual Verification Checkpoints', number: '02' },
@@ -1638,7 +1638,7 @@ export default function App() {
                   role="tab"
                   aria-selected={auditStep === step.id}
                   onClick={() => setAuditStep(step.id)}
-                  className={`flex min-h-14 items-center justify-center gap-2 rounded-lg px-2 py-2 text-center text-[11px] font-semibold transition-colors sm:text-xs ${auditStep === step.id ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                  className={`flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 py-2 text-center text-[11px] font-semibold transition-all sm:text-xs ${auditStep === step.id ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white hover:bg-[#002230]/50' : 'text-slate-600 hover:text-slate-900 hover:bg-[#F4F6F9]'}`}
                 >
                   <span className="font-mono text-[10px] opacity-70">{step.number}</span>
                   <span>{step.label}</span>
@@ -1649,7 +1649,7 @@ export default function App() {
             <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
               <div className="contents">
                 {auditStep === 'metadata' && (
-                <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+                <div className={`space-y-5 rounded-2xl p-6 lg:col-span-12 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
                   <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <Building2 className="h-4 w-4" />
                     <span>Campaign Metadata & Objectives</span>
@@ -1657,23 +1657,23 @@ export default function App() {
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-medium">Client Name</label>
-                      <input type="text" placeholder="e.g. Acme Group" value={clientName} onChange={(e) => setClientName(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Client Name</label>
+                      <input type="text" placeholder="e.g. Acme Group" value={clientName} onChange={(e) => setClientName(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium">Campaign Name</label>
-                      <input type="text" placeholder="e.g. Spring Product Launch" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Campaign Name</label>
+                      <input type="text" placeholder="e.g. Spring Product Launch" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-medium">Target Audience Segment</label>
-                      <input type="text" placeholder="e.g. New subscribers" value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Target Audience Segment</label>
+                      <input type="text" placeholder="e.g. New subscribers" value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium">Core Action / Desired Outcome</label>
-                      <input type="text" placeholder="e.g. Drive product trial signups" value={coreGoal} onChange={(e) => setCoreGoal(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Core Action / Desired Outcome</label>
+                      <input type="text" placeholder="e.g. Drive product trial signups" value={coreGoal} onChange={(e) => setCoreGoal(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
                     </div>
                   </div>
 
@@ -1681,14 +1681,16 @@ export default function App() {
                 )}
 
                 {auditStep === 'verification' && (
-                <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Manual Verification Checkpoints</h3>
-                  <p className={`text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                    Confirm these using your sending platform, DNS records, policy documentation, or rendered-email tests. Unchecked items receive no points.
-                  </p>
-                  <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                <div className={`space-y-5 rounded-2xl p-6 lg:col-span-12 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Manual Verification Checkpoints</h3>
+                    <p className={`mt-1 text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      Confirm these using your sending platform, DNS records, policy documentation, or rendered-email tests. Unchecked items receive no points.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {MANUAL_CHECKPOINTS.map((checkpoint) => (
-                      <label key={checkpoint.id} className="flex items-start gap-2 border-b border-[#405E69]/30 py-2 text-xs leading-relaxed">
+                      <label key={checkpoint.id} className={`flex items-start gap-2.5 rounded-xl p-3 text-xs leading-relaxed transition-colors cursor-pointer ${darkMode ? 'bg-[#002230]/60 hover:bg-[#002230]' : 'bg-[#F4F6F9] hover:bg-[#E9EEF4]'}`}>
                         <input
                           type="checkbox"
                           checked={manualChecks[checkpoint.id]}
@@ -1707,38 +1709,38 @@ export default function App() {
                 )}
 
                 {auditStep === 'content' && (
-                <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-12 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+                <div className={`space-y-5 rounded-2xl p-6 lg:col-span-12 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
                   <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <Mail className="h-4 w-4" />
                     <span>Email Content & Headers</span>
                   </h3>
 
                   <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <label className="text-xs font-medium">Briefed Subject Line</label>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Briefed Subject Line</label>
                       <span className={`text-[10px] ${subjectLine.length > 65 ? 'font-bold text-[#FF002D]' : darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>
                         {subjectLine.length} chars (optimal 20–65)
                       </span>
                     </div>
-                    <input type="text" placeholder="e.g. Discover what’s new this season" value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                    <input type="text" placeholder="e.g. Discover what’s new this season" value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
                   </div>
 
                   <div>
-                    <div className="mb-1 flex items-center justify-between">
-                      <label className="text-xs font-medium">Briefed Pre-Header (Preview Text)</label>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Briefed Pre-Header (Preview Text)</label>
                       <span className={`text-[10px] ${preHeader.length < 20 && preHeader.length > 0 ? 'text-[#FF002D]' : darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>
                         {preHeader.length} chars
                       </span>
                     </div>
-                    <input type="text" placeholder="e.g. Explore the latest updates and find your next step." value={preHeader} onChange={(e) => setPreHeader(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-white focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-900 focus:border-slate-500'}`} />
+                    <input type="text" placeholder="e.g. Explore the latest updates and find your next step." value={preHeader} onChange={(e) => setPreHeader(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-xs font-medium">Full Email Copy (Live Text or HTML)</label>
-                    <textarea rows={10} placeholder="Paste complete message body text or HTML code here..." value={emailCopy} onChange={(e) => setEmailCopy(e.target.value)} className={`w-full rounded-xl border p-3 text-xs font-mono leading-relaxed focus:outline-none transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] text-slate-200 focus:border-[#80949B]' : 'border-[#BFC9CE] bg-slate-50 text-slate-800 focus:border-slate-500'}`} />
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Full Email Copy (Live Text or HTML)</label>
+                    <textarea rows={10} placeholder="Paste complete message body text or HTML code here..." value={emailCopy} onChange={(e) => setEmailCopy(e.target.value)} className={`w-full rounded-xl border-0 p-3.5 text-xs font-mono leading-relaxed focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-slate-200 placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-800 placeholder-slate-400 focus:bg-white'}`} />
                   </div>
-                  <div className="border-t border-[#405E69]/40 pt-4">
-                    <button type="button" onClick={handleCalculateScore} className="flex w-full items-center justify-center space-x-2 rounded-2xl border border-[#741532] bg-gradient-to-r from-[#741532] via-[#405E69] to-[#002837] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-xl transition-all hover:from-[#FF002D] hover:to-[#741532] transform hover:-translate-y-0.5 active:translate-y-0">
+                  <div className="pt-2">
+                    <button type="button" onClick={handleCalculateScore} className="flex w-full items-center justify-center space-x-2 rounded-2xl bg-gradient-to-r from-[#741532] via-[#405E69] to-[#002837] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-lg transition-all hover:from-[#FF002D] hover:to-[#741532] transform hover:-translate-y-0.5 active:translate-y-0">
                       <Zap className="h-4 w-4 fill-current text-[#FF002D]" />
                       <span>Generate Readiness Score</span>
                     </button>
@@ -1752,8 +1754,8 @@ export default function App() {
 
               {hasCalculated && auditResults && (
                 <div className="lg:col-span-12">
-                  <div className={`section-card space-y-4 rounded-2xl border p-5 transition-all ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
-                    <div className="flex flex-col justify-between gap-4 border-b border-[#405E69]/50 pb-5 sm:flex-row sm:items-center">
+                  <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
+                    <div className="flex flex-col justify-between gap-4 border-b border-black/5 dark:border-white/5 pb-5 sm:flex-row sm:items-center">
                       <div>
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Tilte Readiness Scorecard</span>
                         <div className="mt-1 flex items-baseline space-x-2">
@@ -1790,10 +1792,10 @@ export default function App() {
                         const IconComponent = pillar.icon;
 
                         return (
-                          <div key={pillar.index} className={`rounded-xl border transition-all ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                          <div key={pillar.index} className={`rounded-xl border-0 transition-all ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                             <button type="button" onClick={() => togglePillar(pillar.index)} className="flex w-full items-center justify-between p-3.5 text-left focus:outline-none">
                               <div className="flex items-center space-x-2.5">
-                                <div className={`rounded-lg p-1.5 ${darkMode ? 'bg-[#405E69]/40 text-[#BFC9CE]' : 'bg-slate-200 text-slate-700'}`}>
+                                <div className={`rounded-lg p-1.5 ${darkMode ? 'bg-[#072E3D] text-[#BFC9CE]' : 'bg-white text-slate-700 shadow-xs'}`}>
                                   <IconComponent className="h-4 w-4" />
                                 </div>
                                 <div>
@@ -1813,9 +1815,9 @@ export default function App() {
                             </button>
 
                             {isExpanded && (
-                              <div className="space-y-2 border-t border-[#405E69]/30 p-3 pt-0">
+                              <div className="space-y-2 p-3 pt-0">
                                 {pillarRules.map((rule) => (
-                                  <div key={rule.id} className={`flex flex-col justify-between gap-2 rounded-lg border p-2.5 text-xs sm:flex-row sm:items-center ${darkMode ? 'border-[#405E69]/60 bg-[#002837]' : 'border-[#BFC9CE] bg-white'}`}>
+                                  <div key={rule.id} className={`flex flex-col justify-between gap-2 rounded-lg border-0 p-3 text-xs sm:flex-row sm:items-center ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
                                     <div className="flex items-start space-x-2">
                                       <span className="mt-0.5 shrink-0">
                                         {rule.status === 'pass' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
@@ -1847,11 +1849,11 @@ export default function App() {
             </div>
 
             {hasCalculated && auditResults?.ctaAnalysis && (
-              <div className={`section-card space-y-5 rounded-2xl border p-6 transition-all ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white'}`}>
+              <div className={`section-card space-y-5 rounded-2xl border-0 p-6 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
                 {/* Header */}
-                <div className="flex flex-col justify-between gap-3 border-b border-[#405E69]/40 pb-4 sm:flex-row sm:items-center">
+                <div className="flex flex-col justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-4 sm:flex-row sm:items-center">
                   <div className="flex items-center space-x-3">
-                    <div className="rounded-xl border border-[#741532] bg-[#4D1B34] p-2 text-white">
+                    <div className="rounded-xl border-0 bg-[#4D1B34] p-2.5 text-white shadow-xs">
                       <Target className="h-5 w-5 text-[#FF002D]" />
                     </div>
                     <div>
@@ -1869,12 +1871,12 @@ export default function App() {
 
                   <div>
                     {auditResults.ctaAnalysis.isDetected ? (
-                      <span className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400 border border-emerald-500/30">
+                      <span className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                         <span>CTA Identified</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center space-x-1.5 rounded-full bg-[#FF002D]/10 px-3 py-1 text-xs font-bold text-[#FF002D] border border-[#FF002D]/30">
+                      <span className="inline-flex items-center space-x-1.5 rounded-full bg-[#FF002D]/10 px-3 py-1 text-xs font-bold text-[#FF002D]">
                         <AlertOctagon className="h-3.5 w-3.5" />
                         <span>No CTA Detected</span>
                       </span>
@@ -1883,15 +1885,15 @@ export default function App() {
                 </div>
 
                 {/* Primary CTA Outline Banner */}
-                <div className={`rounded-xl border p-4 ${darkMode ? 'border-[#405E69]/60 bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#405E69]/30 pb-3">
+                <div className={`rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/5 dark:border-white/5 pb-3">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Primary Call to Action</span>
                       <div className="mt-0.5 flex flex-wrap items-center gap-2">
                         <span className="text-base font-black text-[#FF002D] dark:text-rose-400">
                           "{auditResults.ctaAnalysis.primaryCtaText}"
                         </span>
-                        <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${darkMode ? 'bg-[#405E69]/40 text-[#BFC9CE]' : 'bg-slate-200 text-slate-700'}`}>
+                        <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${darkMode ? 'bg-[#072E3D] text-[#BFC9CE]' : 'bg-white text-slate-700 shadow-xs'}`}>
                           {auditResults.ctaAnalysis.type === 'html_button' ? 'HTML Button Element' : auditResults.ctaAnalysis.type === 'html_link' ? 'HTML Link' : auditResults.ctaAnalysis.type === 'bracket_cta' ? 'Emphasized CTA' : auditResults.ctaAnalysis.type === 'markdown_link' ? 'Markdown Link' : 'Copy Action Phrase'}
                         </span>
                       </div>
@@ -1902,7 +1904,7 @@ export default function App() {
                       <div className="flex items-center space-x-2">
                         <span className="text-[10px] text-[#80949B]">Rendered Appearance:</span>
                         <div
-                          className="rounded-lg px-3 py-1 text-xs font-bold shadow-sm border border-white/20"
+                          className="rounded-lg px-3 py-1 text-xs font-bold shadow-xs"
                           style={{
                             backgroundColor: auditResults.ctaAnalysis.fillColor,
                             color: auditResults.ctaAnalysis.textColor,
@@ -1929,7 +1931,7 @@ export default function App() {
                 {/* 4-Metric Diagnostic Grid */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   {/* 1. Placement & Fold Position */}
-                  <div className={`space-y-2 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Placement & Fold</span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -1946,7 +1948,7 @@ export default function App() {
                     
                     {/* Fold progress bar */}
                     <div className="space-y-1">
-                      <div className="relative h-2 w-full rounded-full bg-slate-700/50">
+                      <div className="relative h-2 w-full rounded-full bg-slate-700/30">
                         <div
                           className={`h-full rounded-full ${auditResults.ctaAnalysis.foldVerdict === 'above_fold' ? 'bg-emerald-500' : auditResults.ctaAnalysis.foldVerdict === 'mid_body' ? 'bg-amber-500' : 'bg-[#FF002D]'}`}
                           style={{ width: `${Math.min(100, Math.max(5, auditResults.ctaAnalysis.placementPercent))}%` }}
@@ -1965,7 +1967,7 @@ export default function App() {
                   </div>
 
                   {/* 2. WCAG Contrast Ratio */}
-                  <div className={`space-y-2 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Contrast Ratio</span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${auditResults.ctaAnalysis.wcag.badgeBg} ${auditResults.ctaAnalysis.wcag.badgeText}`}>
@@ -2003,7 +2005,7 @@ export default function App() {
                   </div>
 
                   {/* 3. Action Clarity */}
-                  <div className={`space-y-2 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Action Clarity</span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -2025,7 +2027,7 @@ export default function App() {
                   </div>
 
                   {/* 4. Single-Action Focus (Pillar 10) */}
-                  <div className={`space-y-2 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Focus & Hierarchy</span>
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -2054,7 +2056,7 @@ export default function App() {
 
                 {/* Scan link banner if unverified */}
                 {auditResults.ctaAnalysis.contrastSource !== 'design_scan' && (
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-[#405E69]/40 bg-[#002837]/40 px-4 py-3 text-xs text-[#BFC9CE]">
+                  <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border-0 px-4 py-3 text-xs ${darkMode ? 'bg-[#002230] text-[#BFC9CE]' : 'bg-[#F4F6F9] text-slate-700'}`}>
                     <div className="flex items-center space-x-2">
                       <Info className="h-4 w-4 shrink-0 text-amber-400" />
                       <span>
@@ -2075,10 +2077,10 @@ export default function App() {
               </div>
             )}
 
-            <div className={`section-card space-y-4 rounded-2xl border p-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
-              <div className="flex flex-col justify-between gap-3 border-b border-[#405E69]/40 pb-4 md:flex-row md:items-center">
+            <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
+              <div className="flex flex-col justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-4 md:flex-row md:items-center">
                 <div className="flex items-center space-x-2.5">
-                  <div className="rounded-xl border border-[#741532] bg-[#4D1B34] p-2 text-white">
+                  <div className="rounded-xl border-0 bg-[#4D1B34] p-2.5 text-white shadow-xs">
                     <Cpu className="h-5 w-5 text-amber-300" />
                   </div>
                   <div>
@@ -2089,7 +2091,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2 rounded-lg border border-[#741532] bg-[#741532]/20 px-3 py-1.5 text-[11px] text-[#BFC9CE]">
+                <div className="flex items-center space-x-2 rounded-lg border-0 bg-[#741532]/20 px-3 py-1.5 text-[11px] text-[#BFC9CE]">
                   <Info className="h-3.5 w-3.5 shrink-0 text-[#FF002D]" />
                   <span>
                     <strong>Disclaimer:</strong> Rough approximations based on observed LLM behavior (Apple Intelligence, Gemini, Outlook Copilot). Not guaranteed inbox placements.
@@ -2100,11 +2102,11 @@ export default function App() {
               {hasCalculated && auditResults ? (
                 <div className="grid grid-cols-1 gap-4 pt-2 md:grid-cols-3">
                   {/* ── Apple Mail ── */}
-                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border-0 p-4.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between border-b border-[#405E69]/30 pb-2">
-                        <span className="text-xs font-bold text-slate-200 dark:text-white">Apple Mail (Apple Intelligence)</span>
-                        <span className="rounded bg-slate-700/50 px-2 py-0.5 font-mono text-[10px] text-[#BFC9CE]">Notification Card</span>
+                      <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2">
+                        <span className="text-xs font-bold text-slate-800 dark:text-white">Apple Mail (Apple Intelligence)</span>
+                        <span className={`rounded px-2 py-0.5 font-mono text-[10px] ${darkMode ? 'bg-[#072E3D] text-[#BFC9CE]' : 'bg-white text-slate-600 shadow-xs'}`}>Notification Card</span>
                       </div>
                       {simulationsLoading ? (
                         <div className="flex items-center space-x-2 py-2">
@@ -2118,17 +2120,17 @@ export default function App() {
                         <p className="text-xs italic leading-relaxed">"{auditResults.simulations?.apple}"</p>
                       )}
                     </div>
-                    <div className={`border-t border-[#405E69]/30 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Extracted Deadline: <strong className="text-white dark:text-slate-200">{auditResults.simulations?.extractedDate ?? '—'}</strong>
+                    <div className={`border-t border-black/5 dark:border-white/5 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      Extracted Deadline: <strong className="text-slate-900 dark:text-slate-200">{auditResults.simulations?.extractedDate ?? '—'}</strong>
                     </div>
                   </div>
 
                   {/* ── Gmail / Gemini ── */}
-                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border-0 p-4.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between border-b border-[#405E69]/30 pb-2">
-                        <span className="text-xs font-bold text-blue-400">Gmail with Gemini</span>
-                        <span className="rounded bg-blue-900/40 px-2 py-0.5 font-mono text-[10px] text-blue-300">Top-of-Thread</span>
+                      <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2">
+                        <span className="text-xs font-bold text-blue-600 dark:text-blue-400">Gmail with Gemini</span>
+                        <span className={`rounded px-2 py-0.5 font-mono text-[10px] ${darkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-800'}`}>Top-of-Thread</span>
                       </div>
                       {simulationsLoading ? (
                         <div className="flex items-center space-x-2 py-2">
@@ -2136,30 +2138,30 @@ export default function App() {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                           </svg>
-                          <span className="text-[11px] text-blue-300 italic">Gemini is generating highlights…</span>
+                          <span className="text-[11px] text-blue-400 italic">Gemini is generating highlights…</span>
                         </div>
                       ) : (
                         <ul className="space-y-1.5 text-xs">
                           {(auditResults.simulations?.gemini ?? []).map((b, i) => (
                             <li key={i} className="flex items-start space-x-1.5">
-                              <span className="font-bold text-blue-400">•</span>
+                              <span className="font-bold text-blue-500 dark:text-blue-400">•</span>
                               <span className="leading-snug">{b}</span>
                             </li>
                           ))}
                         </ul>
                       )}
                     </div>
-                    <div className={`border-t border-[#405E69]/30 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Detected Amount: <strong className="text-white dark:text-slate-200">{auditResults.simulations?.extractedAmount ?? '—'}</strong>
+                    <div className={`border-t border-black/5 dark:border-white/5 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      Detected Amount: <strong className="text-slate-900 dark:text-slate-200">{auditResults.simulations?.extractedAmount ?? '—'}</strong>
                     </div>
                   </div>
 
                   {/* ── Outlook Copilot ── */}
-                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border-0 p-4.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between border-b border-[#405E69]/30 pb-2">
-                        <span className="text-xs font-bold text-purple-400">Outlook Copilot</span>
-                        <span className="rounded bg-purple-900/40 px-2 py-0.5 font-mono text-[10px] text-purple-300">Summary Card</span>
+                      <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2">
+                        <span className="text-xs font-bold text-purple-600 dark:text-purple-400">Outlook Copilot</span>
+                        <span className={`rounded px-2 py-0.5 font-mono text-[10px] ${darkMode ? 'bg-purple-900/40 text-purple-300' : 'bg-purple-100 text-purple-800'}`}>Summary Card</span>
                       </div>
                       {simulationsLoading ? (
                         <div className="flex items-center space-x-2 py-2">
@@ -2167,27 +2169,27 @@ export default function App() {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                           </svg>
-                          <span className="text-[11px] text-purple-300 italic">Copilot is drafting the summary card…</span>
+                          <span className="text-[11px] text-purple-400 italic">Copilot is drafting the summary card…</span>
                         </div>
                       ) : (
                         <p className="text-xs leading-relaxed">{auditResults.simulations?.copilot}</p>
                       )}
                     </div>
-                    <div className={`border-t border-[#405E69]/30 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Extracted CTA: <strong className="text-white dark:text-slate-200">{auditResults.simulations?.extractedCta ?? '—'}</strong>
+                    <div className={`border-t border-black/5 dark:border-white/5 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      Extracted CTA: <strong className="text-slate-900 dark:text-slate-200">{auditResults.simulations?.extractedCta ?? '—'}</strong>
                     </div>
                   </div>
 
                   {/* ── Error / API key notice ── */}
                   {simulationsError && (
-                    <div className="md:col-span-3 flex items-start space-x-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+                    <div className="md:col-span-3 flex items-start space-x-2 rounded-xl border-0 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-300">
                       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>{simulationsError}</span>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className={`rounded-xl border border-dashed p-8 text-center ${darkMode ? 'border-[#405E69] text-[#80949B]' : 'border-[#BFC9CE] text-slate-400'}`}>
+                <div className={`rounded-xl border-0 p-8 text-center ${darkMode ? 'bg-[#002230] text-[#80949B]' : 'bg-[#F4F6F9] text-slate-400'}`}>
                   <p className="text-xs">Simulated AI inbox extractions will populate automatically when you generate the score above.</p>
                 </div>
               )}
@@ -2197,7 +2199,7 @@ export default function App() {
 
         {activeTab === 'report' && (
           <div className="space-y-6">
-            <div className={`flex items-center justify-between rounded-2xl border p-4 print:hidden ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white shadow-sm'}`}>
+            <div className={`flex items-center justify-between rounded-2xl border-0 p-4 print:hidden shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
               <div className="flex items-center space-x-3">
                 <FileText className="h-5 w-5 text-[#80949B]" />
                 <div>
@@ -2208,13 +2210,13 @@ export default function App() {
                 </div>
               </div>
 
-              <button type="button" onClick={() => window.print()} className="flex items-center space-x-2 rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532] shadow">
+              <button type="button" onClick={() => window.print()} className="flex items-center space-x-2 rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532] shadow-xs">
                 <Printer className="h-4 w-4" />
                 <span>Print / Save PDF</span>
               </button>
             </div>
 
-            <div className="section-card section-card-light rounded-2xl border border-slate-200 bg-white p-8 text-slate-900 shadow-xl print:border-none print:p-0 print:shadow-none sm:p-12">
+            <div className="section-card section-card-light rounded-2xl border-0 bg-white p-8 text-slate-900 shadow-xs print:border-none print:p-0 print:shadow-none sm:p-12">
               <div className="flex items-start justify-between border-b-2 border-slate-900 pb-6">
                 <div>
                   <div className="flex items-center space-x-2">
@@ -2231,8 +2233,8 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mt-8 grid grid-cols-1 gap-6 rounded-2xl border border-slate-200 bg-slate-50 p-6 md:grid-cols-12">
-                <div className="flex flex-col items-center justify-center border-slate-200 pr-6 text-center md:col-span-4 md:border-r">
+              <div className="mt-8 grid grid-cols-1 gap-6 rounded-2xl border-0 bg-[#F4F6F9] p-6 md:grid-cols-12">
+                <div className="flex flex-col items-center justify-center border-black/5 pr-6 text-center md:col-span-4 md:border-r">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Overall Readiness Index</span>
                   <div className="my-2 flex items-baseline space-x-1">
                     <span className="text-6xl font-black tracking-tight text-[#002837]">{hasCalculated && auditResults ? auditResults.score : '--'}</span>
@@ -2257,11 +2259,11 @@ export default function App() {
               </div>
 
               <div className="mt-8 space-y-3">
-                <h3 className="border-b border-slate-200 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">
+                <h3 className="border-b border-black/5 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">
                   Primary Call to Action (CTA) & Visual Contrast Audit (Pillars 10 & 08)
                 </h3>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">Identified Primary CTA</strong>
                     <p className="text-sm font-black text-[#741532]">
                       "{hasCalculated && auditResults?.ctaAnalysis?.isDetected ? auditResults.ctaAnalysis.primaryCtaText : 'No CTA detected'}"
@@ -2276,7 +2278,7 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">Placement & Fold Position</strong>
                     <p className="text-xs font-bold text-slate-800">
                       {hasCalculated && auditResults?.ctaAnalysis ? auditResults.ctaAnalysis.placementBadge : 'Pending calculation'}
@@ -2286,7 +2288,7 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">WCAG 2.1 Contrast Ratio</strong>
                     <p className="text-xs font-bold text-slate-800">
                       {hasCalculated && auditResults?.ctaAnalysis?.contrastRatio
@@ -2303,11 +2305,11 @@ export default function App() {
               </div>
 
               <div className="mt-8 space-y-3">
-                <h3 className="border-b border-slate-200 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">Observed AI Inbox Extract Simulations</h3>
+                <h3 className="border-b border-black/5 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">Observed AI Inbox Extract Simulations</h3>
                 <p className="text-[11px] italic text-slate-500">Note: Inbox summaries are estimated based on observed LLM behavior (Apple Intelligence, Gemini, Outlook Copilot).</p>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="space-y-1 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">Apple Mail Summary</strong>
                     {simulationsLoading ? (
                       <p className="text-xs italic text-slate-400">Generating…</p>
@@ -2316,7 +2318,7 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="space-y-1 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">Gmail Gemini Highlights</strong>
                     <ul className="space-y-1 text-xs text-slate-700">
                       {simulationsLoading ? (
@@ -2329,7 +2331,7 @@ export default function App() {
                     </ul>
                   </div>
 
-                  <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="space-y-1 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">Outlook Copilot Card</strong>
                     {simulationsLoading ? (
                       <p className="text-xs italic text-slate-400">Generating…</p>
@@ -2341,19 +2343,19 @@ export default function App() {
               </div>
 
               <div className="mt-8 space-y-3">
-                <h3 className="border-b border-slate-200 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">Submitted Subject & Copy Breakdown</h3>
+                <h3 className="border-b border-black/5 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">Submitted Subject & Copy Breakdown</h3>
 
-                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
+                <div className="space-y-2 rounded-xl border-0 bg-[#F4F6F9] p-4 text-xs">
                   <p><strong>Subject:</strong> {subjectLine || 'N/A'}</p>
                   <p><strong>Pre-Header:</strong> {preHeader || 'N/A'}</p>
-                  <div className="border-t border-slate-200 pt-2">
+                  <div className="border-t border-black/5 pt-2">
                     <strong className="mb-1 block">Body Text Content:</strong>
                     <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-700">{emailCopy || 'No copy provided.'}</pre>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-6 text-[11px] text-slate-500">
+              <div className="mt-8 flex items-center justify-between border-t border-black/5 pt-6 text-[11px] text-slate-500">
                 <span>© 2027 Tilte Email Campaign Readiness Studio. All rights reserved.</span>
                 <span>Confidential QA Deliverable</span>
               </div>
@@ -2363,12 +2365,12 @@ export default function App() {
 
         {activeTab === 'methodology' && (
           <div className="space-y-6">
-            <div className={`section-card flex flex-col justify-between gap-4 rounded-2xl border p-6 md:flex-row md:items-center ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+            <div className={`section-card flex flex-col justify-between gap-4 rounded-2xl border-0 p-6 shadow-xs md:flex-row md:items-center ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
               <div>
                 <div className="flex items-center space-x-2">
                   <BookOpen className="h-5 w-5 text-[#80949B]" />
                   <h2 className="text-lg font-black tracking-tight">Current Methodologies & Knowledge Base</h2>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${userRole === 'admin' ? 'border-[#FF002D] bg-[#741532]/40 text-rose-300' : 'border-[#405E69] bg-[#405E69]/30 text-[#BFC9CE]'}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${userRole === 'admin' ? 'bg-[#741532]/40 text-rose-300' : 'bg-[#405E69]/30 text-[#BFC9CE]'}`}>
                     {userRole === 'admin' ? 'Editing Enabled' : 'View Only'}
                   </span>
                 </div>
@@ -2380,17 +2382,17 @@ export default function App() {
               <div className="flex items-center space-x-2 self-start md:self-auto">
                 {userRole === 'admin' ? (
                   <>
-                    <button type="button" onClick={handleResetToDefaultMethodology} title="Reset rules to 2027 baseline" className={`rounded-xl border p-2 text-xs font-semibold transition-all ${darkMode ? 'border-[#405E69] text-[#80949B] hover:text-white' : 'border-[#BFC9CE] text-slate-600 hover:text-slate-900'}`}>
+                    <button type="button" onClick={handleResetToDefaultMethodology} title="Reset rules to 2027 baseline" className={`rounded-xl border-0 p-2 text-xs font-semibold transition-all ${darkMode ? 'bg-[#002230] text-[#80949B] hover:text-white' : 'bg-[#F4F6F9] text-slate-600 hover:text-slate-900 shadow-xs'}`}>
                       <RotateCcw className="h-4 w-4" />
                     </button>
 
-                    <button type="button" onClick={() => setIsAddRuleModalOpen(true)} className="flex items-center space-x-2 rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532] shadow">
+                    <button type="button" onClick={() => setIsAddRuleModalOpen(true)} className="flex items-center space-x-2 rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532] shadow-xs">
                       <Plus className="h-4 w-4" />
                       <span>Add Methodology Rule</span>
                     </button>
                   </>
                 ) : (
-                  <div className="flex items-center space-x-1.5 rounded-lg border border-[#405E69]/40 bg-[#002837]/40 px-3 py-1.5 text-xs text-[#80949B]">
+                  <div className="flex items-center space-x-1.5 rounded-lg border-0 bg-[#002230] px-3 py-1.5 text-xs text-[#80949B]">
                     <Lock className="h-3.5 w-3.5" />
                     <span>Editing access is limited to approved administrators</span>
                   </div>
@@ -2399,15 +2401,15 @@ export default function App() {
             </div>
 
             {methodologyStatusMsg && (
-              <div className="flex items-center space-x-2 rounded-xl border border-emerald-500 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-400">
+              <div className="flex items-center space-x-2 rounded-xl border-0 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-400">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
                 <span>{methodologyStatusMsg}</span>
               </div>
             )}
 
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-              <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-4 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
-                <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
+              <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-4 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
+                <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
                   <h3 className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-[#80949B]">
                     <FileText className="h-4 w-4" />
                     <span>Grounding Sources ({sources.length})</span>
@@ -2416,7 +2418,7 @@ export default function App() {
 
                 <div className="space-y-2.5">
                   {sources.map((src) => (
-                    <div key={src.id} onClick={() => setSelectedSource(src)} className={`cursor-pointer rounded-xl border p-3 text-xs transition-all ${selectedSource.id === src.id ? 'border-[#80949B] bg-[#405E69]/30' : darkMode ? 'border-[#405E69] hover:bg-[#405E69]/20' : 'border-[#BFC9CE] hover:bg-slate-50'}`}>
+                    <div key={src.id} onClick={() => setSelectedSource(src)} className={`cursor-pointer rounded-xl border-0 p-3.5 text-xs transition-all ${selectedSource.id === src.id ? darkMode ? 'bg-[#002230] ring-2 ring-[#405E69]' : 'bg-white shadow-xs ring-2 ring-[#405E69]/40' : darkMode ? 'bg-[#002230] hover:bg-[#002837]' : 'bg-[#F4F6F9] hover:bg-[#E9EDF2]'}`}>
                       <div className="mb-1 flex items-center justify-between">
                         <span className="rounded bg-[#4D1B34] px-2 py-0.5 text-[10px] font-bold text-white">{src.category}</span>
                         <span className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>{src.date}</span>
@@ -2427,15 +2429,15 @@ export default function App() {
                   ))}
                 </div>
 
-                <div className={`space-y-2 rounded-xl border p-4 text-xs ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                <div className={`space-y-2 rounded-xl border-0 p-4 text-xs ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                   <span className="block text-[10px] font-bold uppercase text-[#80949B]">Selected Source Detail</span>
                   <h4 className="font-bold">{selectedSource.title}</h4>
                   <p className={`leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-600'}`}>{selectedSource.snippet}</p>
                 </div>
               </div>
 
-              <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-8 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
-                <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
+              <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-8 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
+                <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Active Criteria & Scoring Weight Rules ({rules.length})</h3>
                   <div className="flex items-center space-x-3">
                     <span className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Total Max Weight: {rules.reduce((acc, r) => acc + r.weight, 0)} pts</span>
@@ -2445,7 +2447,7 @@ export default function App() {
 
                 <div className="space-y-2.5">
                   {rules.map((rule) => (
-                    <div key={rule.id} className={`flex items-center justify-between gap-3 rounded-xl border p-3 text-xs transition-colors ${darkMode ? 'border-[#405E69] bg-[#002837] hover:border-[#80949B]' : 'border-[#BFC9CE] bg-white hover:border-slate-400'}`}>
+                    <div key={rule.id} className={`flex items-center justify-between gap-3 rounded-xl border-0 p-3.5 text-xs transition-colors ${darkMode ? 'bg-[#002230] hover:bg-[#002837]' : 'bg-[#F4F6F9] hover:bg-[#E9EDF2]'}`}>
                       <div className="flex items-center space-x-3">
                         <span className="rounded bg-[#405E69] px-2 py-1 text-xs font-black text-white">{rule.code}</span>
                         <div>
@@ -2458,7 +2460,7 @@ export default function App() {
                       </div>
 
                       <div className="flex shrink-0 items-center space-x-3">
-                        <span className="rounded border border-[#741532] bg-[#741532]/30 px-2 py-1 font-mono text-xs font-bold text-[#BFC9CE]">{rule.weight} pts</span>
+                        <span className="rounded bg-[#741532]/30 px-2 py-1 font-mono text-xs font-bold text-[#BFC9CE]">{rule.weight} pts</span>
                         {userRole === 'admin' ? (
                           <button type="button" onClick={() => handleDeleteRule(rule.id)} className="p-1 text-[#80949B] transition-colors hover:text-[#FF002D]" title="Remove rule (Admin)">
                             <Trash2 className="h-4 w-4" />
@@ -2475,8 +2477,8 @@ export default function App() {
 
             {isAddRuleModalOpen && userRole === 'admin' && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-                <div className={`w-full max-w-md space-y-4 rounded-2xl border p-6 shadow-2xl transition-all ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-white text-slate-900'}`}>
-                  <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
+                <div className={`w-full max-w-md space-y-4 rounded-2xl border-0 p-6 shadow-2xl transition-all ${darkMode ? 'bg-[#072E3D] text-white' : 'bg-white text-slate-900'}`}>
+                  <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
                     <h3 className="text-sm font-bold">Add Custom Methodology Rule (Admin)</h3>
                     <button type="button" onClick={() => setIsAddRuleModalOpen(false)} className="text-slate-400 hover:text-white">
                       <X className="h-5 w-5" />
@@ -2486,7 +2488,7 @@ export default function App() {
                   <form onSubmit={handleAddRule} className="space-y-3 text-xs">
                     <div>
                       <label className="mb-1 block font-medium">Pillar Group</label>
-                      <select value={newRule.pillarIndex} onChange={(e) => setNewRule({ ...newRule, pillarIndex: Number(e.target.value) })} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`}>
+                      <select value={newRule.pillarIndex} onChange={(e) => setNewRule({ ...newRule, pillarIndex: Number(e.target.value) })} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white' : 'bg-[#F4F6F9] text-slate-900'}`}>
                         <option value={1}>01 / The Science of Getting In</option>
                         <option value={2}>02 / The Art of Standing Out</option>
                         <option value={3}>03 / The Intelligence Behind Results</option>
@@ -2495,24 +2497,24 @@ export default function App() {
 
                     <div>
                       <label className="mb-1 block font-medium">Rule Title</label>
-                      <input type="text" placeholder="e.g. BIMI SVG Logo Compliance" value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} required />
+                      <input type="text" placeholder="e.g. BIMI SVG Logo Compliance" value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white' : 'bg-[#F4F6F9] text-slate-900'}`} required />
                     </div>
 
                     <div>
                       <label className="mb-1 block font-medium">Description</label>
-                      <textarea rows={2} placeholder="Explain evaluation criteria..." value={newRule.desc} onChange={(e) => setNewRule({ ...newRule, desc: e.target.value })} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
+                      <textarea rows={2} placeholder="Explain evaluation criteria..." value={newRule.desc} onChange={(e) => setNewRule({ ...newRule, desc: e.target.value })} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white' : 'bg-[#F4F6F9] text-slate-900'}`} />
                     </div>
 
                     <div>
                       <label className="mb-1 block font-medium">Score Weight Points</label>
-                      <input type="number" min="1" max="20" value={newRule.weight} onChange={(e) => setNewRule({ ...newRule, weight: e.target.value })} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
+                      <input type="number" min="1" max="20" value={newRule.weight} onChange={(e) => setNewRule({ ...newRule, weight: e.target.value })} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white' : 'bg-[#F4F6F9] text-slate-900'}`} />
                     </div>
 
                     <div className="flex justify-end space-x-2 pt-2">
-                      <button type="button" onClick={() => setIsAddRuleModalOpen(false)} className={`rounded-xl px-4 py-2 text-xs font-semibold ${darkMode ? 'bg-[#405E69]/40 text-slate-300' : 'bg-slate-100 text-slate-700'}`}>
+                      <button type="button" onClick={() => setIsAddRuleModalOpen(false)} className={`rounded-xl px-4 py-2 text-xs font-semibold ${darkMode ? 'bg-[#002230] text-slate-300' : 'bg-slate-100 text-slate-700'}`}>
                         Cancel
                       </button>
-                      <button type="submit" className="rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532]">
+                      <button type="submit" className="rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532] shadow-xs">
                         Save & Sync Rule
                       </button>
                     </div>
@@ -2525,7 +2527,7 @@ export default function App() {
 
         {activeTab === 'creative' && (
           <div className="space-y-6">
-            <div className={`section-card rounded-2xl border p-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+            <div className={`section-card rounded-2xl border-0 p-6 shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
               <div className="flex items-center space-x-2">
                 <Palette className="h-5 w-5 text-[#80949B]" />
                 <h2 className="text-lg font-black tracking-tight">Creative Review & CI Adherence Studio</h2>
@@ -2536,10 +2538,10 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-              <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+              <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-6 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Final Email Design & Client Brief</h3>
 
-                <div className={`rounded-xl border-2 border-dashed p-5 text-center ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                <div className={`rounded-xl border-2 border-dashed p-6 text-center transition-colors ${darkMode ? 'border-[#405E69]/50 bg-[#002230] hover:border-[#80949B]' : 'border-slate-300 bg-[#F4F6F9] hover:border-slate-400'}`}>
                   <input type="file" id="designUploadInput" className="hidden" onChange={handleDesignFile} accept="image/png,image/jpeg,image/webp,image/svg+xml,.pdf" />
                   <label htmlFor="designUploadInput" className="block cursor-pointer space-y-2">
                     <Eye className="mx-auto h-6 w-6 text-[#80949B]" />
@@ -2550,8 +2552,8 @@ export default function App() {
                 {designScanStatus && <p className={`text-[11px] ${designScanStatus.startsWith('Scan failed') || designScanStatus.startsWith('Upload') ? 'text-rose-400' : darkMode ? 'text-[#80949B]' : 'text-slate-500'}`} role="status">{designScanStatus}</p>}
 
                 {designPreviewUrl && (
-                  <div className={`overflow-hidden rounded-xl border ${darkMode ? 'border-[#405E69] bg-[#001D29]' : 'border-[#BFC9CE] bg-slate-100'}`}>
-                    <div className={`border-b px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'border-[#405E69] text-[#80949B]' : 'border-[#BFC9CE] text-slate-500'}`}>
+                  <div className={`overflow-hidden rounded-xl border-0 shadow-xs ${darkMode ? 'bg-[#001D29]' : 'bg-[#E9EDF2]'}`}>
+                    <div className={`border-b border-black/5 dark:border-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                       Final Email Design Preview
                     </div>
                     {designFile?.type === 'application/pdf' || designFile?.name.toLowerCase().endsWith('.pdf') ? (
@@ -2564,10 +2566,10 @@ export default function App() {
 
                 <div>
                   <label className="mb-1 block text-xs font-medium">Client Design Brief</label>
-                  <textarea rows={4} placeholder="Describe the intended layout, brand colors (include hex values), typography, imagery, accessibility needs, and CTA treatment." value={designBriefContent} onChange={(e) => setDesignBriefContent(e.target.value)} className={`w-full rounded-xl border p-2.5 text-xs focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
+                  <textarea rows={4} placeholder="Describe the intended layout, brand colors (include hex values), typography, imagery, accessibility needs, and CTA treatment." value={designBriefContent} onChange={(e) => setDesignBriefContent(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400'}`} />
                 </div>
 
-                <div className={`rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                <div className={`rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                   <label htmlFor="styleGuideUploadInput" className="mb-2 block text-xs font-medium">Style Guide Reference (optional)</label>
                   <input id="styleGuideUploadInput" type="file" onChange={handleStyleGuideFile} accept="image/png,image/jpeg,image/webp,image/svg+xml,.pdf" className={`block w-full text-[11px] file:mr-3 file:rounded-md file:border-0 file:bg-[#405E69] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white ${darkMode ? 'text-[#BFC9CE]' : 'text-slate-600'}`} />
                   <p className={`mt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
@@ -2578,29 +2580,29 @@ export default function App() {
                 <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block font-medium">Final Subject</label>
-                    <input type="text" placeholder="e.g. Product Update Announcement" value={creativeSubject} onChange={(e) => setCreativeSubject(e.target.value)} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
+                    <input type="text" placeholder="e.g. Product Update Announcement" value={creativeSubject} onChange={(e) => setCreativeSubject(e.target.value)} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400'}`} />
                   </div>
                   <div>
                     <label className="mb-1 block font-medium">Final Pre-Header</label>
-                    <input type="text" placeholder="e.g. Action required by 28 Feb" value={creativePreheader} onChange={(e) => setCreativePreheader(e.target.value)} className={`w-full rounded-xl border p-2.5 focus:outline-none ${darkMode ? 'border-[#405E69] bg-[#002837] text-white' : 'border-[#BFC9CE] bg-slate-50 text-slate-900'}`} />
+                    <input type="text" placeholder="e.g. Action required by 28 Feb" value={creativePreheader} onChange={(e) => setCreativePreheader(e.target.value)} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400'}`} />
                   </div>
                 </div>
                 <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                   These final values are compared with the briefed subject and pre-header entered under Email Content & Headers; they do not need to appear inside the Figma render.
                 </p>
 
-                <button type="button" onClick={handleRunCreativeReview} disabled={isScanningDesign} className="flex w-full items-center justify-center space-x-2 rounded-xl bg-[#405E69] px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow disabled:cursor-wait disabled:opacity-60">
+                <button type="button" onClick={handleRunCreativeReview} disabled={isScanningDesign} className="flex w-full items-center justify-center space-x-2 rounded-xl bg-[#405E69] px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow-xs disabled:cursor-wait disabled:opacity-60">
                   <Target className="h-4 w-4" />
                   <span>{isScanningDesign ? 'Scanning Final Design...' : 'Run Creative & CI Alignment Review'}</span>
                 </button>
               </div>
 
-              <div className={`section-card space-y-4 rounded-2xl border p-5 lg:col-span-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
+              <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-6 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Creative Review Audit Results</h3>
 
                 {creativeAuditRun && creativeFindings ? (
                   <div className="space-y-4 text-xs animate-fadeIn">
-                    <div className="flex items-center justify-between border-b border-[#405E69]/40 pb-3">
+                    <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
                       <div>
                         <span className={`text-[10px] font-bold uppercase ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Final Design Scan</span>
                         <div className="mt-1 text-xs font-semibold">{designFileName}</div>
@@ -2618,7 +2620,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className={`space-y-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                    <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                       <strong className="block">Style Guide Reference</strong>
                       <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                         {creativeFindings.styleGuideFileName
@@ -2634,18 +2636,18 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className={`space-y-3 rounded-xl border p-4 ${darkMode ? 'border-[#741532] bg-[#4D1B34]/30' : 'border-rose-200 bg-rose-50'}`}>
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#741532]/40 pb-2.5">
-                        <span className="flex items-center space-x-1.5 text-xs font-bold text-rose-300">
+                    <div className={`space-y-3 rounded-xl border-0 p-4.5 ${darkMode ? 'bg-[#4D1B34]/30' : 'bg-rose-50/70'}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/5 dark:border-white/5 pb-2.5">
+                        <span className="flex items-center space-x-1.5 text-xs font-bold text-rose-500 dark:text-rose-300">
                           <Target className="h-4 w-4 text-[#FF002D]" />
                           <span>Call to Action (CTA) Identified in Design</span>
                         </span>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-black text-rose-200">
+                          <span className="font-mono text-xs font-black text-rose-600 dark:text-rose-200">
                             "{creativeFindings.ctaText}"
                           </span>
                           {creativeFindings.ctaButton?.buttonWidth && (
-                            <span className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-[#BFC9CE]">
+                            <span className="rounded bg-black/10 dark:bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-slate-700 dark:text-[#BFC9CE]">
                               {creativeFindings.ctaButton.buttonWidth} × {creativeFindings.ctaButton.buttonHeight}px
                             </span>
                           )}
@@ -2654,7 +2656,7 @@ export default function App() {
 
                       <p className="text-xs leading-relaxed">{creativeFindings.ctaRecommendation}</p>
 
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 border-t border-[#741532]/40 pt-3 text-xs">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 border-t border-black/5 dark:border-white/5 pt-3 text-xs">
                         {/* Placement */}
                         <div className="space-y-1">
                           <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Placement & Fold</span>
@@ -2663,10 +2665,10 @@ export default function App() {
                           </p>
                           <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
                             creativeFindings.ctaButton?.foldVerdict === 'above_fold'
-                              ? 'bg-emerald-500/20 text-emerald-300'
+                              ? 'bg-emerald-500/20 text-emerald-400 dark:text-emerald-300'
                               : creativeFindings.ctaButton?.foldVerdict === 'mid_body'
-                                ? 'bg-amber-500/20 text-amber-300'
-                                : 'bg-[#FF002D]/20 text-rose-300'
+                                ? 'bg-amber-500/20 text-amber-500 dark:text-amber-300'
+                                : 'bg-[#FF002D]/20 text-rose-500 dark:text-rose-300'
                           }`}>
                             {creativeFindings.ctaButton?.foldVerdict === 'above_fold' ? 'Optimal (Above Fold)' : creativeFindings.ctaButton?.foldVerdict === 'mid_body' ? 'Mid-Section' : 'High Risk (Below Fold)'}
                           </span>
@@ -2681,7 +2683,7 @@ export default function App() {
                             </span>
                             {creativeFindings.ctaButton?.wcagEvaluation && (
                               <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${creativeFindings.ctaButton.wcagEvaluation.badgeBg} ${creativeFindings.ctaButton.wcagEvaluation.badgeText}`}>
-                                {creativeFindings.ctaButton.wcagEvaluation.label}
+                                creativeFindings.ctaButton.wcagEvaluation.label
                               </span>
                             )}
                           </div>
@@ -2704,8 +2706,8 @@ export default function App() {
                           </p>
                           <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
                             creativeFindings.ctaButton?.touchTargetMeetsStandard
-                              ? 'bg-emerald-500/20 text-emerald-300'
-                              : 'bg-amber-500/20 text-amber-300'
+                              ? 'bg-emerald-500/20 text-emerald-400 dark:text-emerald-300'
+                              : 'bg-amber-500/20 text-amber-500 dark:text-amber-300'
                           }`}>
                             {creativeFindings.ctaButton?.touchTargetMeetsStandard ? 'Pass (≥44px Standard)' : 'Sub-44px (Small target)'}
                           </span>
@@ -2717,7 +2719,7 @@ export default function App() {
                           <p className="font-bold">
                             {creativeFindings.ctaButton?.buttonLike ? 'Button-shaped container' : 'Text-link style'}
                           </p>
-                          <p className="text-[10px] text-slate-300 dark:text-slate-400">
+                          <p className="text-[10px] text-slate-600 dark:text-slate-400">
                             {creativeFindings.ctaButton?.standoutColor
                               ? `Standout fill (${creativeFindings.ctaButton.fillColor}) distinguishes action from background.`
                               : 'Button lacks high-chroma standout fill against canvas.'}
@@ -2727,7 +2729,7 @@ export default function App() {
                     </div>
 
                     <div className="space-y-2.5">
-                      <div className={`flex items-start space-x-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                      <div className={`flex items-start space-x-2 rounded-xl border-0 p-3.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                         <div>
                           <strong className="block">Brief Subject & Pre-Header Comparison:</strong>
@@ -2735,7 +2737,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className={`flex items-start space-x-2 rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                      <div className={`flex items-start space-x-2 rounded-xl border-0 p-3.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
                         <div>
                           <strong className="block">Final Design Palette:</strong>
@@ -2744,14 +2746,14 @@ export default function App() {
                           </div>
                         </div>
                       </div>
-                      <details className={`rounded-xl border p-3 ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                      <details className={`rounded-xl border-0 p-3.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                         <summary className="cursor-pointer text-xs font-semibold">View text detected in the final design</summary>
                         <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed">{creativeFindings.recognizedText}</pre>
                       </details>
                     </div>
                   </div>
                 ) : (
-                  <div className={`rounded-xl border border-dashed p-8 text-center ${darkMode ? 'border-[#405E69] text-[#80949B]' : 'border-[#BFC9CE] text-slate-400'}`}>
+                  <div className={`rounded-xl border-0 p-8 text-center ${darkMode ? 'bg-[#002230] text-[#80949B]' : 'bg-[#F4F6F9] text-slate-400'}`}>
                     <MousePointer className="mx-auto mb-2 h-8 w-8 opacity-50" />
                     <p className="text-xs">Upload the final email design, add the client brief and final subject details, then run the scan to inspect detected copy and colors.</p>
                   </div>

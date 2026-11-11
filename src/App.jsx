@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   signInWithCustomToken,
   signInAnonymously,
@@ -95,6 +95,558 @@ const MANUAL_CHECKPOINTS = [
   { id: 'experimentation', ruleId: 'r15', label: 'A test hypothesis, audience split, and success measure are documented.' },
 ];
 
+// ─── Gemini-powered inbox simulation ───────────────────────────────────────
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+async function callGemini(systemPrompt, userContent) {
+  const res = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: userContent }] }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      generationConfig: { temperature: 0.4, maxOutputTokens: 400 },
+    }),
+  });
+  if (!res.ok) throw new Error(`Gemini API error: ${res.status}`);
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+}
+
+const APPLE_SYSTEM_PROMPT = `You are Apple Intelligence inside Apple Mail. Your job is to generate a single-sentence email summary that appears on the iOS/macOS notification card and in the mailbox list view.
+
+Rules:
+- Maximum 1 sentence, ideally under 20 words.
+- Plain, natural English — no corporate jargon.
+- Action-first: start with what the recipient needs to do or what is happening.
+- Never mention sender names, brand names, or marketing language.
+- Do not include emojis, quotes, or punctuation beyond a period.
+- Output ONLY the summary sentence, nothing else.`;
+
+const GMAIL_SYSTEM_PROMPT = `You are Gmail's Gemini AI summary engine. Generate a "top-of-thread" summary displayed above the email body in Gmail.
+
+Rules:
+- Return exactly 3 bullet points, each under 15 words.
+- Each bullet captures one key piece of information: the main message, a key detail (date, amount, deadline), and the primary action.
+- Bullet format: plain text starting with a verb or key noun. No hyphens or symbols — just the text.
+- Tone: informational, neutral, slightly formal.
+- Output ONLY the 3 bullets separated by newlines, nothing else.`;
+
+const OUTLOOK_SYSTEM_PROMPT = `You are Microsoft Copilot inside Outlook. Generate a "Copilot Summary" card shown at the top of the email reading pane.
+
+Rules:
+- 2–3 sentences maximum.
+- Professional, concise, direct.
+- Mention the core subject, any key dates or figures, and the recommended next step.
+- Do not use bullet points — write flowing prose.
+- Output ONLY the summary paragraph, nothing else.`;
+
+// ─── Color, Contrast & WCAG Calculations ────────────────────────────────────
+function parseCssColor(colorStr) {
+  if (!colorStr || typeof colorStr !== 'string') return null;
+  const s = colorStr.trim().toLowerCase();
+
+  const NAMED_COLORS = {
+    white: [255, 255, 255],
+    black: [0, 0, 0],
+    red: [255, 0, 0],
+    green: [0, 128, 0],
+    blue: [0, 0, 255],
+    yellow: [255, 255, 0],
+    orange: [255, 165, 0],
+    purple: [128, 0, 128],
+    navy: [0, 0, 128],
+    darkblue: [0, 0, 139],
+    teal: [0, 128, 128],
+    gray: [128, 128, 128],
+    grey: [128, 128, 128],
+    lightgray: [211, 211, 211],
+    lightgrey: [211, 211, 211],
+    darkgray: [169, 169, 169],
+    darkgrey: [169, 169, 169],
+    silver: [192, 192, 192],
+    crimson: [220, 20, 60],
+  };
+  if (NAMED_COLORS[s]) return NAMED_COLORS[s];
+
+  const cleanHex = s.startsWith('#') ? s.slice(1) : (s.length === 3 || s.length === 6) && /^[0-9a-f]+$/i.test(s) ? s : null;
+  if (cleanHex) {
+    if (cleanHex.length === 3) {
+      return [
+        parseInt(cleanHex[0] + cleanHex[0], 16),
+        parseInt(cleanHex[1] + cleanHex[1], 16),
+        parseInt(cleanHex[2] + cleanHex[2], 16),
+      ];
+    }
+    if (cleanHex.length >= 6) {
+      return [
+        parseInt(cleanHex.slice(0, 2), 16),
+        parseInt(cleanHex.slice(2, 4), 16),
+        parseInt(cleanHex.slice(4, 6), 16),
+      ];
+    }
+  }
+
+  const rgbMatch = s.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (rgbMatch) {
+    return [parseInt(rgbMatch[1], 10), parseInt(rgbMatch[2], 10), parseInt(rgbMatch[3], 10)];
+  }
+
+  return null;
+}
+
+function calculateLuminance([r, g, b]) {
+  const [rs, gs, bs] = [r, g, b].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+function calculateWcagContrast(rgbA, rgbB) {
+  if (!rgbA || !rgbB) return null;
+  const l1 = calculateLuminance(rgbA);
+  const l2 = calculateLuminance(rgbB);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  const ratio = (lighter + 0.05) / (darker + 0.05);
+  return Math.round(ratio * 100) / 100;
+}
+
+function evaluateWcagCompliance(ratio) {
+  if (!ratio || typeof ratio !== 'number' || !Number.isFinite(ratio)) {
+    return {
+      level: 'unverified',
+      label: 'Unverified',
+      pass: false,
+      badgeBg: 'bg-slate-700/60',
+      badgeText: 'text-slate-300',
+      description: 'Visual contrast unverified — pending HTML button styles or design scan.',
+    };
+  }
+  if (ratio >= 7.0) {
+    return {
+      level: 'aaa',
+      label: 'WCAG AAA (Enhanced)',
+      pass: true,
+      badgeBg: 'bg-emerald-600',
+      badgeText: 'text-white',
+      description: 'Exceptional contrast. Readable across all screen brightness settings and lighting environments.',
+    };
+  }
+  if (ratio >= 4.5) {
+    return {
+      level: 'aa',
+      label: 'WCAG AA Pass',
+      pass: true,
+      badgeBg: 'bg-emerald-500',
+      badgeText: 'text-white',
+      description: 'Meets WCAG 2.1 AA requirements (≥4.5:1) for standard text and interactive buttons.',
+    };
+  }
+  if (ratio >= 3.0) {
+    return {
+      level: 'aa_large_only',
+      label: 'Large Text Only (≥3.0:1)',
+      pass: false,
+      badgeBg: 'bg-amber-500',
+      badgeText: 'text-white',
+      description: 'Borderline. Passes WCAG AA only for large text (≥18pt bold or ≥24pt regular); fails standard text.',
+    };
+  }
+  return {
+    level: 'fail',
+    label: 'WCAG Fail (<3.0:1)',
+    pass: false,
+    badgeBg: 'bg-[#FF002D]',
+    badgeText: 'text-white',
+    description: 'Fails WCAG accessibility standards. Illegible contrast (<3:1) causing reader disengagement.',
+  };
+}
+
+// ─── Robust Email CTA & Placement Analysis Engine ───────────────────────────
+function analyzeEmailCta(emailCopy = '', visualScan = null) {
+  const copy = (emailCopy || '').trim();
+  if (!copy) {
+    return {
+      isDetected: false,
+      primaryCtaText: 'No CTA detected',
+      type: 'none',
+      foldVerdict: 'none',
+      placementPercent: 0,
+      placementBadge: 'No CTA Found',
+      placementGuidance: 'Please paste email copy or HTML to analyze call to action placement and contrast.',
+      contrastRatio: null,
+      contrastStatus: 'unverified',
+      wcag: evaluateWcagCompliance(null),
+      textColor: null,
+      fillColor: null,
+      contrastSource: 'none',
+      clarityRating: 'Missing Action',
+      isVague: false,
+      competingCtas: [],
+      competingCount: 0,
+      totalCtasFound: 0,
+      flawReason: 'No recognizable CTA found in copy.',
+    };
+  }
+
+  const UTILITY_LINK_REGEX = /\b(unsubscribe|opt[\s-]*out|privacy|terms|preferences|browser|view[\s-]*online|forward|manage|cookie|login|sign[\s-]*in|log[\s-]*in|help|support|contact|policy|facebook|twitter|instagram|linkedin|youtube|tiktok|pinterest|threads|x\.com)\b/i;
+  const VAGUE_PHRASES = ['click here', 'learn more', 'read more', 'find out more', 'more info', 'continue', 'submit', 'go here', 'here', 'see more', 'view more'];
+
+  const candidates = [];
+  const copyLength = copy.length;
+
+  // 1. Parse HTML if tags present
+  const isHtml = /<[a-z][\s\S]*>/i.test(copy);
+  if (isHtml) {
+    let parsedWithDom = false;
+    if (typeof DOMParser !== 'undefined') {
+      try {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(copy, 'text/html');
+        const interactiveElements = doc.querySelectorAll('a, button, [role="button"], [class*="btn"], [class*="button"], td[bgcolor]');
+
+        interactiveElements.forEach((el) => {
+          const text = (el.textContent || '').trim();
+          const href = el.getAttribute('href') || '';
+          const style = el.getAttribute('style') || '';
+          const rawHtml = el.outerHTML;
+
+          if (!text || text.length < 2 || text.length > 80) return;
+          if (UTILITY_LINK_REGEX.test(text) || UTILITY_LINK_REGEX.test(href)) return;
+          if (href.startsWith('mailto:') || href.startsWith('tel:')) return;
+
+          let fillColorStr = el.getAttribute('bgcolor') || null;
+          let textColorStr = null;
+
+          const bgMatch = style.match(/(?:background(?:-color)?)\s*:\s*([^;!]+)/i);
+          if (bgMatch) fillColorStr = bgMatch[1].trim();
+
+          const colorMatch = style.match(/(?:^|;)\s*color\s*:\s*([^;!]+)/i);
+          if (colorMatch) textColorStr = colorMatch[1].trim();
+
+          if (!fillColorStr && el.parentElement) {
+            const parentBg = el.parentElement.getAttribute('bgcolor') || el.parentElement.getAttribute('style')?.match(/(?:background(?:-color)?)\s*:\s*([^;!]+)/i)?.[1];
+            if (parentBg) fillColorStr = parentBg.trim();
+          }
+
+          const rgbFill = parseCssColor(fillColorStr);
+          const rgbText = parseCssColor(textColorStr);
+          const contrastRatio = (rgbFill && rgbText) ? calculateWcagContrast(rgbFill, rgbText) : null;
+
+          const charIndex = copy.indexOf(rawHtml);
+          const positionPercent = charIndex >= 0 ? Math.round((charIndex / Math.max(1, copyLength)) * 100) : 50;
+          const isVague = VAGUE_PHRASES.some((v) => text.toLowerCase().includes(v));
+
+          candidates.push({
+            text,
+            type: el.tagName.toLowerCase() === 'button' || style.includes('background') || el.className.includes('btn') ? 'html_button' : 'html_link',
+            positionPercent,
+            charIndex: charIndex >= 0 ? charIndex : copyLength / 2,
+            isVague,
+            styleColors: {
+              fillColor: fillColorStr,
+              textColor: textColorStr,
+              contrastRatio,
+              rgbFill,
+              rgbText,
+            },
+          });
+        });
+        parsedWithDom = candidates.length > 0;
+      } catch (e) {
+        console.warn('DOMParser warning:', e);
+      }
+    }
+
+    // Regex HTML fallback if DOMParser is unavailable or found no candidates
+    if (!parsedWithDom) {
+      const tagRegex = /<(a|button)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+      let tMatch;
+      while ((tMatch = tagRegex.exec(copy)) !== null) {
+        const tag = tMatch[1].toLowerCase();
+        const attrs = tMatch[2];
+        const inner = tMatch[3];
+        const text = inner.replace(/<[^>]+>/g, '').trim();
+
+        if (!text || text.length < 2 || text.length > 80) continue;
+        if (UTILITY_LINK_REGEX.test(text) || UTILITY_LINK_REGEX.test(attrs)) continue;
+
+        let fillColorStr = null;
+        let textColorStr = null;
+
+        const bgMatch = attrs.match(/(?:background(?:-color)?)\s*:\s*([^;"'!]+)/i) || attrs.match(/bgcolor=["']?([^"'\s>]+)/i);
+        if (bgMatch) fillColorStr = bgMatch[1].trim();
+
+        const colorMatch = attrs.match(/(?:^|;|\s)color\s*:\s*([^;"'!]+)/i);
+        if (colorMatch) textColorStr = colorMatch[1].trim();
+
+        const rgbFill = parseCssColor(fillColorStr);
+        const rgbText = parseCssColor(textColorStr);
+        const contrastRatio = (rgbFill && rgbText) ? calculateWcagContrast(rgbFill, rgbText) : null;
+
+        const positionPercent = Math.round((tMatch.index / Math.max(1, copyLength)) * 100);
+        const isVague = VAGUE_PHRASES.some((v) => text.toLowerCase().includes(v));
+
+        candidates.push({
+          text,
+          type: tag === 'button' || fillColorStr ? 'html_button' : 'html_link',
+          positionPercent,
+          charIndex: tMatch.index,
+          isVague,
+          styleColors: {
+            fillColor: fillColorStr,
+            textColor: textColorStr,
+            contrastRatio,
+            rgbFill,
+            rgbText,
+          },
+        });
+      }
+    }
+  }
+
+  // 2. Markdown links: [Text](url)
+  const mdLinkRegex = /\[([^\]]{2,80})\]\(([^)]+)\)/g;
+  let mdMatch;
+  while ((mdMatch = mdLinkRegex.exec(copy)) !== null) {
+    const text = mdMatch[1].trim();
+    const url = mdMatch[2].trim();
+    if (UTILITY_LINK_REGEX.test(text) || UTILITY_LINK_REGEX.test(url)) continue;
+    const isVague = VAGUE_PHRASES.some((v) => text.toLowerCase().includes(v));
+    const positionPercent = Math.round((mdMatch.index / Math.max(1, copyLength)) * 100);
+    candidates.push({
+      text,
+      type: 'markdown_link',
+      positionPercent,
+      charIndex: mdMatch.index,
+      isVague,
+      styleColors: null,
+    });
+  }
+
+  // 3. Bracketed CTAs: [Shop Now], >> Register Today <<, CTA: Claim Offer
+  const bracketRegex = /\[([A-Za-z0-9\s!?'\-$%]{3,60})\]|>>\s*([A-Za-z0-9\s!?'\-$%]{3,60})\s*<<|CTA:\s*([A-Za-z0-9\s!?'\-$%]{3,60})/g;
+  let bMatch;
+  while ((bMatch = bracketRegex.exec(copy)) !== null) {
+    const text = (bMatch[1] || bMatch[2] || bMatch[3] || '').trim();
+    if (!text || UTILITY_LINK_REGEX.test(text)) continue;
+    const isVague = VAGUE_PHRASES.some((v) => text.toLowerCase().includes(v));
+    const positionPercent = Math.round((bMatch.index / Math.max(1, copyLength)) * 100);
+    candidates.push({
+      text,
+      type: 'bracket_cta',
+      positionPercent,
+      charIndex: bMatch.index,
+      isVague,
+      styleColors: null,
+    });
+  }
+
+  // 4. Action phrases in text
+  const actionPhraseRegex = /\b(shop|buy|order|get|claim|grab|start|try|sign\s*up|register|join|book|reserve|schedule|download|access|discover|explore|renew|upgrade|confirm|verify|donate|apply|enroll|save|unlock|request)\b\s+([A-Za-z0-9!?'\-$%]{2,20}(?:\s+[A-Za-z0-9!?'\-$%]{2,20}){0,5})/gi;
+  let aMatch;
+  while ((aMatch = actionPhraseRegex.exec(copy)) !== null) {
+    const phrase = aMatch[0].trim();
+    if (phrase.length > 50) continue;
+    const prefix = copy.slice(Math.max(0, aMatch.index - 15), aMatch.index).toLowerCase();
+    if (/\b(we|you can|you will|they|i|when|if|as|how to)\s*$/i.test(prefix)) continue;
+
+    const isVague = VAGUE_PHRASES.some((v) => phrase.toLowerCase().includes(v));
+    const positionPercent = Math.round((aMatch.index / Math.max(1, copyLength)) * 100);
+    candidates.push({
+      text: phrase,
+      type: 'action_phrase',
+      positionPercent,
+      charIndex: aMatch.index,
+      isVague,
+      styleColors: null,
+    });
+  }
+
+  // 5. Standalone vague phrases
+  const vagueRegex = /\b(click\s+here|learn\s+more|read\s+more|find\s+out\s+more|more\s+info|continue|submit|view\s+more|see\s+more)\b/gi;
+  let vMatch;
+  while ((vMatch = vagueRegex.exec(copy)) !== null) {
+    const phrase = vMatch[0].trim();
+    const positionPercent = Math.round((vMatch.index / Math.max(1, copyLength)) * 100);
+    candidates.push({
+      text: phrase,
+      type: 'vague_phrase',
+      positionPercent,
+      charIndex: vMatch.index,
+      isVague: true,
+      styleColors: null,
+    });
+  }
+
+  // Deduplicate candidates
+  const uniqueCandidates = [];
+  const seenTexts = new Set();
+  for (const c of candidates) {
+    const norm = c.text.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!norm || seenTexts.has(norm)) continue;
+    seenTexts.add(norm);
+    uniqueCandidates.push(c);
+  }
+
+  // Rank candidates
+  uniqueCandidates.sort((a, b) => {
+    const typeScore = (item) => {
+      if (item.type === 'html_button') return 100;
+      if (item.type === 'bracket_cta' || item.type === 'markdown_link') return 80;
+      if (item.type === 'html_link') return 70;
+      if (item.type === 'action_phrase' && !item.isVague) return 60;
+      if (item.isVague) return 20;
+      return 10;
+    };
+    const diff = typeScore(b) - typeScore(a);
+    if (diff !== 0) return diff;
+    return a.charIndex - b.charIndex;
+  });
+
+  const primaryCandidate = uniqueCandidates[0] || null;
+  const competingCtas = uniqueCandidates.slice(1);
+
+  if (!primaryCandidate) {
+    return {
+      isDetected: false,
+      primaryCtaText: 'No CTA detected',
+      type: 'none',
+      foldVerdict: 'none',
+      placementPercent: 0,
+      placementBadge: 'No CTA Found',
+      placementGuidance: 'No recognizable button, link, or action phrase detected in the submitted copy.',
+      contrastRatio: null,
+      contrastStatus: 'unverified',
+      wcag: evaluateWcagCompliance(null),
+      textColor: null,
+      fillColor: null,
+      contrastSource: 'none',
+      clarityRating: 'Missing Action',
+      isVague: false,
+      competingCtas: [],
+      competingCount: 0,
+      totalCtasFound: 0,
+      flawReason: 'No recognizable CTA found in copy.',
+    };
+  }
+
+  // Placement determination
+  const placementPercent = visualScan?.placementYPercent !== undefined
+    ? visualScan.placementYPercent
+    : primaryCandidate.positionPercent;
+
+  let foldVerdict = 'above_fold';
+  let placementBadge = `Above the Fold (Top ${placementPercent}%)`;
+  let placementGuidance = 'Optimal placement — positioned early in the reading flow (top 40%). Recipients see the primary action on mobile screens before scrolling.';
+
+  if (placementPercent > 70) {
+    foldVerdict = 'below_fold';
+    placementBadge = `Below the Fold (${placementPercent}% down)`;
+    placementGuidance = 'High drop-off risk — positioned in the bottom 30% of the email. Up to 60% of mobile users disengage before scrolling this deep. Recommend moving a primary CTA higher into the top 40%.';
+  } else if (placementPercent > 40) {
+    foldVerdict = 'mid_body';
+    placementBadge = `Mid-Body (${placementPercent}% down)`;
+    placementGuidance = 'Acceptable placement — positioned after initial value proposition. Works well for considered decisions, but testing an earlier anchor button in the top 35% is advised for mobile readers.';
+  }
+
+  // Contrast determination
+  let contrastRatio = null;
+  let textColor = null;
+  let fillColor = null;
+  let contrastSource = 'none';
+
+  if (visualScan?.contrastRatio) {
+    contrastRatio = visualScan.contrastRatio;
+    textColor = visualScan.textColor;
+    fillColor = visualScan.fillColor;
+    contrastSource = 'design_scan';
+  } else if (primaryCandidate.styleColors?.contrastRatio) {
+    contrastRatio = primaryCandidate.styleColors.contrastRatio;
+    textColor = primaryCandidate.styleColors.textColor;
+    fillColor = primaryCandidate.styleColors.fillColor;
+    contrastSource = 'html_styles';
+  }
+
+  const wcag = evaluateWcagCompliance(contrastRatio);
+  const contrastStatus = contrastRatio !== null
+    ? (wcag.pass ? 'pass' : wcag.level === 'aa_large_only' ? 'warning' : 'fail')
+    : 'unverified';
+
+  // Clarity rating
+  const clarityRating = primaryCandidate.isVague
+    ? `Vague / Generic Action ("${primaryCandidate.text}")`
+    : `Action-Oriented & Specific ("${primaryCandidate.text}")`;
+
+  // Flaw reason
+  let flawReason = '';
+  if (foldVerdict === 'below_fold') flawReason = 'CTA is placed too deep (>70% down) risking mobile drop-off';
+  else if (primaryCandidate.isVague) flawReason = 'CTA phrasing is generic and lacks specific conversion incentive';
+  else if (competingCtas.length >= 3) flawReason = `${competingCtas.length + 1} competing CTAs cause decision fatigue`;
+
+  return {
+    isDetected: true,
+    primaryCtaText: primaryCandidate.text,
+    type: primaryCandidate.type,
+    foldVerdict,
+    placementPercent,
+    placementBadge,
+    placementGuidance,
+    contrastRatio,
+    contrastStatus,
+    wcag,
+    textColor,
+    fillColor,
+    contrastSource,
+    clarityRating,
+    isVague: primaryCandidate.isVague,
+    competingCtas: competingCtas.map((c) => c.text),
+    competingCount: competingCtas.length,
+    totalCtasFound: uniqueCandidates.length,
+    flawReason,
+  };
+}
+
+async function generateInboxSimulations(subjectLine, preHeader, emailCopy) {
+  const emailContext = `Subject: ${subjectLine || '(no subject)'}
+Pre-header: ${preHeader || '(none)'}
+Body:
+${emailCopy}`;
+
+  const [appleRaw, gmailRaw, outlookRaw] = await Promise.all([
+    callGemini(APPLE_SYSTEM_PROMPT, emailContext),
+    callGemini(GMAIL_SYSTEM_PROMPT, emailContext),
+    callGemini(OUTLOOK_SYSTEM_PROMPT, emailContext),
+  ]);
+
+  // Parse Gmail bullets (newline-separated)
+  const geminiBullets = gmailRaw
+    .split('\n')
+    .map((l) => l.replace(/^[-•*]\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  // Accurate regex and CTA extraction from raw copy
+  const dateMatch = emailCopy.match(
+    /\b(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+ \d{1,2},?\s*\d{4}|by \w+ \d{1,2}(?:st|nd|rd|th)?)\b/i,
+  );
+  const amountMatch = emailCopy.match(/[R$€£¥]\s?[\d,]+(?:\.\d{2})?/);
+  const ctaResult = analyzeEmailCta(emailCopy);
+
+  return {
+    apple: appleRaw,
+    gemini: geminiBullets.length > 0 ? geminiBullets : ['Summary could not be generated.'],
+    copilot: outlookRaw,
+    extractedDate: dateMatch ? dateMatch[0] : 'Not detected',
+    extractedAmount: amountMatch ? amountMatch[0] : 'Not detected',
+    extractedCta: ctaResult.isDetected ? ctaResult.primaryCtaText : 'Not detected',
+  };
+}
+// ───────────────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('studio');
@@ -125,6 +677,8 @@ export default function App() {
   const [emailCopy, setEmailCopy] = useState('');
   const [hasCalculated, setHasCalculated] = useState(false);
   const [auditResults, setAuditResults] = useState(null);
+  const [simulationsLoading, setSimulationsLoading] = useState(false);
+  const [simulationsError, setSimulationsError] = useState(null);
   const [designFile, setDesignFile] = useState(null);
   const [designFileName, setDesignFileName] = useState('');
   const [designPreviewUrl, setDesignPreviewUrl] = useState('');
@@ -551,12 +1105,49 @@ export default function App() {
           : null;
         const standoutColor = Boolean(fill.rgb && outer.rgb && colorDistance(fill.rgb, outer.rgb) >= 55 && Math.max(...fill.rgb) - Math.min(...fill.rgb) >= 40);
         const buttonAspectRatio = (buttonBox.x1 - buttonBox.x0) / Math.max(1, buttonBox.y1 - buttonBox.y0);
+
+        const placementYPercent = Math.round((((buttonBox.y0 + buttonBox.y1) / 2) / Math.max(1, canvas.height)) * 100);
+        const placementXPercent = Math.round((((buttonBox.x0 + buttonBox.x1) / 2) / Math.max(1, canvas.width)) * 100);
+        const buttonWidth = Math.round(buttonBox.x1 - buttonBox.x0);
+        const buttonHeight = Math.round(buttonBox.y1 - buttonBox.y0);
+
+        const foldVerdict = placementYPercent <= 45 ? 'above_fold' : placementYPercent <= 70 ? 'mid_body' : 'below_fold';
+        const placementLabel = placementYPercent <= 45
+          ? `Above the Fold (Top ${placementYPercent}% of canvas)`
+          : placementYPercent <= 70
+            ? `Mid-Email (${placementYPercent}% down canvas)`
+            : `Below the Fold (${placementYPercent}% down canvas - Buried)`;
+
+        const placementGuidance = placementYPercent <= 45
+          ? 'Optimal placement: Located in the upper portion of the email design. Recipient sees the primary action without scrolling.'
+          : placementYPercent <= 70
+            ? 'Acceptable placement: Positioned in the middle section. If the email contains multiple visual banners, consider placing an early anchor CTA above the fold.'
+            : 'High drop-off risk: Positioned near the bottom of the design. Mobile recipients frequently disengage before scrolling this deep.';
+
+        const touchTargetMeetsStandard = buttonHeight >= 44;
+        const touchTargetFeedback = touchTargetMeetsStandard
+          ? `Pass (${buttonHeight}px height, meets the 44px+ mobile tap target standard)`
+          : `Warning (${buttonHeight}px height — recommend min 44px for thumb tap target)`;
+
+        const contrastRatioNum = textContrast ? Math.round(textContrast * 100) / 100 : null;
+        const wcagEvaluation = evaluateWcagCompliance(contrastRatioNum);
+
         return {
           buttonLike: fill.coverage >= 0.55 && colorDistance(fill.rgb, outer.rgb) >= 55 && buttonAspectRatio >= 1.25,
           standoutColor,
           fillColor: fill.rgb ? `#${colorKey(fill.rgb)}` : null,
           textColor: text.rgb ? `#${colorKey(text.rgb)}` : null,
-          contrastRatio: textContrast ? Math.round(textContrast * 100) / 100 : null,
+          contrastRatio: contrastRatioNum,
+          placementYPercent,
+          placementXPercent,
+          buttonWidth,
+          buttonHeight,
+          foldVerdict,
+          placementLabel,
+          placementGuidance,
+          touchTargetMeetsStandard,
+          touchTargetFeedback,
+          wcagEvaluation,
         };
       };
       const analyzedCtas = [...ctaCandidates, ...visualCtaCandidates].map((candidate) => ({ ...candidate, analysis: analyzeCtaButton(candidate) }));
@@ -618,11 +1209,11 @@ export default function App() {
           : 'No usable colors were found in the style guide or typed brief, so palette matching was not assessed.',
         ctaRecommendation: callToAction
           ? vagueCta
-            ? `The scan found "${callToAction}". Consider replacing it with a specific action tied to the campaign goal.`
-            : `The scan found this possible call to action: "${callToAction}". Review the button-shape, standout-color, and contrast checks below.`
+            ? `Detected CTA: "${callToAction}" (${ctaButton?.placementLabel || 'Placement unassessed'}). Phrasing is generic ("${callToAction}"); replace with an action verb specific to your core campaign goal.`
+            : `Detected CTA: "${callToAction}" · ${ctaButton?.placementLabel || ''}. ${ctaButton?.placementGuidance || ''}`
           : ctaButton?.buttonLike
-            ? 'A solid, standout button-like region was detected, but its label was not readable. Review its copy manually.'
-            : 'No recognizable CTA text or button-like color region was detected in the scanned design.',
+            ? `Solid button-like region detected (${ctaButton.placementLabel}). Text label was not clearly readable by OCR. Manual inspection required.`
+            : 'No recognizable call-to-action button or text detected on the design canvas.',
         contentMatch: [
           subjectMatch === null ? 'Enter the brief and final subject in Audit Studio and Creative Review to compare them.' : `Subject keyword overlap with brief: ${subjectMatch}%.`,
           preheaderMatch === null ? 'Enter the brief and final pre-header in Audit Studio and Creative Review to compare them.' : `Pre-header keyword overlap with brief: ${preheaderMatch}%.`,
@@ -630,6 +1221,18 @@ export default function App() {
       });
       setCreativeAuditRun(true);
       setDesignScanStatus('Design scan complete.');
+
+      // If Audit Studio score has been calculated, synchronize with design-verified visual scan
+      if (emailCopy.trim()) {
+        setAuditResults((prev) => {
+          if (!prev) return prev;
+          const updatedCta = analyzeEmailCta(emailCopy, ctaButton);
+          return {
+            ...prev,
+            ctaAnalysis: updatedCta,
+          };
+        });
+      }
     } catch (error) {
       setDesignScanStatus(`Scan failed: ${error.message || 'The design could not be scanned.'}`);
     } finally {
@@ -734,31 +1337,73 @@ export default function App() {
     }
   };
 
-  const handleCalculateScore = () => {
+  const handleCalculateScore = async () => {
     if (!emailCopy.trim()) {
       alert('Please add a subject line and email copy before running the audit.');
       return;
     }
 
-    const hasClearCta = /\[(.*?)\]/.test(emailCopy) || /\b(start|shop|buy|register|subscribe|download|explore|discover|view|apply|donate|contact|reply|sign up|learn|book|confirm|renew|review|schedule|claim|try|get|request|visit)\b/i.test(emailCopy);
+    // Run robust CTA & contrast analysis engine
+    const ctaAnalysis = analyzeEmailCta(emailCopy, creativeFindings?.ctaButton);
 
     const evaluatedRules = rules.map((rule) => {
       const checkpoint = MANUAL_CHECKPOINTS.find((item) => item.ruleId === rule.id);
-      const pass = checkpoint ? manualChecks[checkpoint.id] : rule.id === 'r10' && hasClearCta;
-      const status = pass ? 'pass' : 'warning';
-      const earned = pass ? rule.weight : 0;
-      const reason = checkpoint
+      let pass = checkpoint ? manualChecks[checkpoint.id] : false;
+      let status = pass ? 'pass' : 'warning';
+      let earned = pass ? rule.weight : 0;
+      let reason = checkpoint
         ? pass
           ? 'Confirmed by the reviewer using the manual checkpoint.'
           : 'Not confirmed; this criterion cannot be verified from the submitted copy alone.'
-        : rule.id === 'r10'
-          ? pass
-            ? 'A possible call to action was found in the submitted copy; review its clarity and prominence.'
-            : 'No recognizable call to action was found in the submitted copy.'
-          : 'No verification method is configured for this criterion.';
+        : 'No verification method is configured for this criterion.';
+
+      // Rule 10: One Message. One Clear Action.
+      if (rule.id === 'r10') {
+        if (checkpoint && manualChecks[checkpoint.id]) {
+          pass = true;
+          status = 'pass';
+          earned = rule.weight;
+          reason = 'Confirmed by the reviewer using the manual checkpoint.';
+        } else if (ctaAnalysis.isDetected) {
+          if (ctaAnalysis.foldVerdict === 'above_fold' && !ctaAnalysis.isVague && ctaAnalysis.competingCount <= 1) {
+            pass = true;
+            status = 'pass';
+            earned = rule.weight;
+            reason = `Optimal: Primary CTA "${ctaAnalysis.primaryCtaText}" detected above the fold (${ctaAnalysis.placementBadge}) with single focal action intent.`;
+          } else {
+            pass = false;
+            status = 'warning';
+            earned = Math.round(rule.weight * 0.5);
+            reason = `CTA "${ctaAnalysis.primaryCtaText}" detected, but ${ctaAnalysis.flawReason}. Review placement and clarity.`;
+          }
+        } else {
+          pass = false;
+          status = 'alert';
+          earned = 0;
+          reason = 'No clear call to action or button element was detected in the submitted copy.';
+        }
+      }
+
+      // Rule 8: Accessibility Is Good Design (contrast integration)
+      if (rule.id === 'r8' && !checkpoint) {
+        if (ctaAnalysis.contrastRatio !== null) {
+          if (ctaAnalysis.contrastRatio < 3.0) {
+            pass = false;
+            status = 'alert';
+            earned = 0;
+            reason = `Accessibility alert: CTA button contrast (${ctaAnalysis.contrastRatio}:1) fails WCAG AA minimum threshold (4.5:1).`;
+          } else if (ctaAnalysis.contrastRatio >= 4.5) {
+            pass = true;
+            status = 'pass';
+            earned = rule.weight;
+            reason = `Confirmed: CTA button contrast (${ctaAnalysis.contrastRatio}:1) satisfies WCAG 2.1 AA requirements.`;
+          }
+        }
+      }
 
       return {
         ...rule,
+        pass,
         status,
         earned,
         reason,
@@ -775,20 +1420,43 @@ export default function App() {
         ? { label: 'Needs Refinement', bg: 'bg-amber-500', text: 'text-white' }
         : { label: 'High Risk', bg: 'bg-[#FF002D]', text: 'text-white' };
 
+    // Set score immediately; simulations load asynchronously
     setAuditResults({
       score,
       ratingBadge,
       evaluatedRules,
-      simulations: {
-        apple: 'Submitted email content reviewed for message clarity and primary action.',
-        gemini: ['Key message identified', 'Primary call to action assessed', 'Content clarity reviewed'],
-        copilot: 'Primary action and supporting details assessed from the submitted copy.',
-        extractedDate: 'Not detected',
-        extractedAmount: 'Not detected',
-        extractedCta: 'Not detected',
-      },
+      simulations: null,
+      ctaAnalysis,
     });
     setHasCalculated(true);
+    setSimulationsLoading(true);
+    setSimulationsError(null);
+
+    try {
+      const simulations = await generateInboxSimulations(subjectLine, preHeader, emailCopy);
+      setAuditResults((prev) => ({ ...prev, simulations }));
+    } catch (err) {
+      console.error('Simulation error:', err);
+      setSimulationsError(
+        GEMINI_API_KEY
+          ? 'AI simulation failed. Check your API key or network connection.'
+          : 'No Gemini API key set. Add VITE_GEMINI_API_KEY to your .env.local file.',
+      );
+      // Fallback placeholder simulations
+      setAuditResults((prev) => ({
+        ...prev,
+        simulations: {
+          apple: 'Email content reviewed for message clarity and primary action.',
+          gemini: ['Key message identified', 'Primary call to action assessed', 'Content clarity reviewed'],
+          copilot: 'Primary action and supporting details assessed from the submitted copy.',
+          extractedDate: 'Not detected',
+          extractedAmount: 'Not detected',
+          extractedCta: 'Not detected',
+        },
+      }));
+    } finally {
+      setSimulationsLoading(false);
+    }
   };
 
   const teamPermissionsOpen = () => setIsTeamModalOpen(true);
@@ -1178,6 +1846,235 @@ export default function App() {
               )}
             </div>
 
+            {hasCalculated && auditResults?.ctaAnalysis && (
+              <div className={`section-card space-y-5 rounded-2xl border p-6 transition-all ${darkMode ? 'border-[#405E69] bg-[#002837]' : 'border-[#BFC9CE] bg-white'}`}>
+                {/* Header */}
+                <div className="flex flex-col justify-between gap-3 border-b border-[#405E69]/40 pb-4 sm:flex-row sm:items-center">
+                  <div className="flex items-center space-x-3">
+                    <div className="rounded-xl border border-[#741532] bg-[#4D1B34] p-2 text-white">
+                      <Target className="h-5 w-5 text-[#FF002D]" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-sm font-bold uppercase tracking-wider">CTA & Visual Contrast Architecture</h3>
+                        <span className="rounded bg-[#741532]/40 px-2 py-0.5 font-mono text-[10px] text-rose-300">
+                          Pillars 10 & 08
+                        </span>
+                      </div>
+                      <p className={`text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                        Call-to-action identification, placement fold analysis, and WCAG 2.1 AA luminance contrast verification.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    {auditResults.ctaAnalysis.isDetected ? (
+                      <span className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400 border border-emerald-500/30">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>CTA Identified</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center space-x-1.5 rounded-full bg-[#FF002D]/10 px-3 py-1 text-xs font-bold text-[#FF002D] border border-[#FF002D]/30">
+                        <AlertOctagon className="h-3.5 w-3.5" />
+                        <span>No CTA Detected</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Primary CTA Outline Banner */}
+                <div className={`rounded-xl border p-4 ${darkMode ? 'border-[#405E69]/60 bg-[#002837]/60' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#405E69]/30 pb-3">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Primary Call to Action</span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <span className="text-base font-black text-[#FF002D] dark:text-rose-400">
+                          "{auditResults.ctaAnalysis.primaryCtaText}"
+                        </span>
+                        <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${darkMode ? 'bg-[#405E69]/40 text-[#BFC9CE]' : 'bg-slate-200 text-slate-700'}`}>
+                          {auditResults.ctaAnalysis.type === 'html_button' ? 'HTML Button Element' : auditResults.ctaAnalysis.type === 'html_link' ? 'HTML Link' : auditResults.ctaAnalysis.type === 'bracket_cta' ? 'Emphasized CTA' : auditResults.ctaAnalysis.type === 'markdown_link' ? 'Markdown Link' : 'Copy Action Phrase'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Visual contrast sample pill if colors detected */}
+                    {auditResults.ctaAnalysis.fillColor && auditResults.ctaAnalysis.textColor && (
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] text-[#80949B]">Rendered Appearance:</span>
+                        <div
+                          className="rounded-lg px-3 py-1 text-xs font-bold shadow-sm border border-white/20"
+                          style={{
+                            backgroundColor: auditResults.ctaAnalysis.fillColor,
+                            color: auditResults.ctaAnalysis.textColor,
+                          }}
+                        >
+                          {auditResults.ctaAnalysis.primaryCtaText.slice(0, 24)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {auditResults.ctaAnalysis.competingCount > 0 && (
+                    <div className="mt-2.5 text-xs text-[#80949B]">
+                      <span className="font-semibold text-slate-300 dark:text-slate-200">Secondary / Competing Actions Detected ({auditResults.ctaAnalysis.competingCount}):</span>{' '}
+                      {auditResults.ctaAnalysis.competingCtas.map((c, i) => (
+                        <span key={i} className="inline-block rounded bg-slate-800/60 px-1.5 py-0.5 text-[11px] font-mono mr-1.5 text-slate-300">
+                          "{c}"
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4-Metric Diagnostic Grid */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {/* 1. Placement & Fold Position */}
+                  <div className={`space-y-2 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Placement & Fold</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        auditResults.ctaAnalysis.foldVerdict === 'above_fold'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : auditResults.ctaAnalysis.foldVerdict === 'mid_body'
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-[#FF002D]/20 text-[#FF002D]'
+                      }`}>
+                        {auditResults.ctaAnalysis.foldVerdict === 'above_fold' ? 'Optimal' : auditResults.ctaAnalysis.foldVerdict === 'mid_body' ? 'Acceptable' : 'High Risk'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold">{auditResults.ctaAnalysis.placementBadge}</p>
+                    
+                    {/* Fold progress bar */}
+                    <div className="space-y-1">
+                      <div className="relative h-2 w-full rounded-full bg-slate-700/50">
+                        <div
+                          className={`h-full rounded-full ${auditResults.ctaAnalysis.foldVerdict === 'above_fold' ? 'bg-emerald-500' : auditResults.ctaAnalysis.foldVerdict === 'mid_body' ? 'bg-amber-500' : 'bg-[#FF002D]'}`}
+                          style={{ width: `${Math.min(100, Math.max(5, auditResults.ctaAnalysis.placementPercent))}%` }}
+                        />
+                        <div className="absolute top-0 bottom-0 left-[40%] w-0.5 bg-white/40" title="40% Fold line" />
+                      </div>
+                      <div className="flex justify-between text-[9px] text-[#80949B]">
+                        <span>Top (0%)</span>
+                        <span className="text-slate-400">Fold (40%)</span>
+                        <span>Bottom (100%)</span>
+                      </div>
+                    </div>
+                    <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      {auditResults.ctaAnalysis.placementGuidance}
+                    </p>
+                  </div>
+
+                  {/* 2. WCAG Contrast Ratio */}
+                  <div className={`space-y-2 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Contrast Ratio</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${auditResults.ctaAnalysis.wcag.badgeBg} ${auditResults.ctaAnalysis.wcag.badgeText}`}>
+                        {auditResults.ctaAnalysis.wcag.label}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline space-x-1.5">
+                      <span className="text-2xl font-black">
+                        {auditResults.ctaAnalysis.contrastRatio ? `${auditResults.ctaAnalysis.contrastRatio}:1` : '—'}
+                      </span>
+                      <span className="text-[10px] text-[#80949B]">
+                        {auditResults.ctaAnalysis.contrastRatio ? '(WCAG AA min: 4.5:1)' : 'Pending verification'}
+                      </span>
+                    </div>
+                    {auditResults.ctaAnalysis.contrastRatio ? (
+                      <div className="flex items-center space-x-2 text-[11px] font-mono">
+                        <span className="inline-flex items-center space-x-1">
+                          <span className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: auditResults.ctaAnalysis.textColor || '#fff' }} />
+                          <span>{auditResults.ctaAnalysis.textColor}</span>
+                        </span>
+                        <span className="text-slate-500">on</span>
+                        <span className="inline-flex items-center space-x-1">
+                          <span className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: auditResults.ctaAnalysis.fillColor || '#000' }} />
+                          <span>{auditResults.ctaAnalysis.fillColor}</span>
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-amber-400">
+                        Unverified in text copy. Add HTML styles or run Creative Review scan.
+                      </p>
+                    )}
+                    <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      {auditResults.ctaAnalysis.wcag.description}
+                    </p>
+                  </div>
+
+                  {/* 3. Action Clarity */}
+                  <div className={`space-y-2 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Action Clarity</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        auditResults.ctaAnalysis.isVague
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : auditResults.ctaAnalysis.isDetected
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-slate-700 text-slate-400'
+                      }`}>
+                        {auditResults.ctaAnalysis.isVague ? 'Refine' : auditResults.ctaAnalysis.isDetected ? 'High Intent' : 'Missing'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-bold">{auditResults.ctaAnalysis.clarityRating}</p>
+                    <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      {auditResults.ctaAnalysis.isVague
+                        ? 'Generic phrases like "click here" or "learn more" decrease conversion. Action verbs coupled with a tangible benefit increase click propensity.'
+                        : 'Specific, benefit-driven call to action. Directly signals to the reader what outcome to expect upon clicking.'}
+                    </p>
+                  </div>
+
+                  {/* 4. Single-Action Focus (Pillar 10) */}
+                  <div className={`space-y-2 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Focus & Hierarchy</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        auditResults.ctaAnalysis.competingCount === 0
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : auditResults.ctaAnalysis.competingCount <= 2
+                            ? 'bg-amber-500/20 text-amber-400'
+                            : 'bg-[#FF002D]/20 text-[#FF002D]'
+                      }`}>
+                        {auditResults.ctaAnalysis.competingCount === 0 ? 'Single Intent' : `${auditResults.ctaAnalysis.competingCount + 1} Actions`}
+                      </span>
+                    </div>
+                    <div className="flex items-baseline space-x-1.5">
+                      <span className="text-2xl font-black">{auditResults.ctaAnalysis.totalCtasFound}</span>
+                      <span className="text-[10px] text-[#80949B]">actions detected</span>
+                    </div>
+                    <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      {auditResults.ctaAnalysis.competingCount === 0
+                        ? 'Optimal: Follows Pillar 10 ("One Message. One Clear Action"). Eliminates decision fatigue.'
+                        : auditResults.ctaAnalysis.competingCount <= 2
+                          ? 'Acceptable: Primary goal supported by secondary choice. Ensure primary button visually dominates.'
+                          : 'High Friction: Multiple unranked CTAs compete for clicks. Recommended to consolidate to one primary focal goal.'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Scan link banner if unverified */}
+                {auditResults.ctaAnalysis.contrastSource !== 'design_scan' && (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-[#405E69]/40 bg-[#002837]/40 px-4 py-3 text-xs text-[#BFC9CE]">
+                    <div className="flex items-center space-x-2">
+                      <Info className="h-4 w-4 shrink-0 text-amber-400" />
+                      <span>
+                        {auditResults.ctaAnalysis.contrastSource === 'html_styles'
+                          ? 'Contrast was calculated from HTML inline styles. For pixel-accurate render testing across email clients, run Creative Review.'
+                          : 'Physical visual contrast is unverified from copy alone. Upload your rendered design in Creative Review to test pixel-level contrast and button geometry.'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('creative')}
+                      className="shrink-0 rounded-lg bg-[#405E69] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#741532] transition-colors"
+                    >
+                      Open Creative Review →
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className={`section-card space-y-4 rounded-2xl border p-6 ${darkMode ? 'bg-[#002837]' : 'section-card-light bg-white'}`}>
               <div className="flex flex-col justify-between gap-3 border-b border-[#405E69]/40 pb-4 md:flex-row md:items-center">
                 <div className="flex items-center space-x-2.5">
@@ -1202,51 +2099,92 @@ export default function App() {
 
               {hasCalculated && auditResults ? (
                 <div className="grid grid-cols-1 gap-4 pt-2 md:grid-cols-3">
+                  {/* ── Apple Mail ── */}
                   <div className={`flex flex-col justify-between space-y-3 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between border-b border-[#405E69]/30 pb-2">
                         <span className="text-xs font-bold text-slate-200 dark:text-white">Apple Mail (Apple Intelligence)</span>
                         <span className="rounded bg-slate-700/50 px-2 py-0.5 font-mono text-[10px] text-[#BFC9CE]">Notification Card</span>
                       </div>
-                      <p className="text-xs italic leading-relaxed">"{auditResults.simulations.apple}"</p>
+                      {simulationsLoading ? (
+                        <div className="flex items-center space-x-2 py-2">
+                          <svg className="h-3.5 w-3.5 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                          <span className="text-[11px] text-slate-400 italic">Apple Intelligence is summarising…</span>
+                        </div>
+                      ) : (
+                        <p className="text-xs italic leading-relaxed">"{auditResults.simulations?.apple}"</p>
+                      )}
                     </div>
                     <div className={`border-t border-[#405E69]/30 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Extracted Deadline: <strong className="text-white dark:text-slate-200">{auditResults.simulations.extractedDate}</strong>
+                      Extracted Deadline: <strong className="text-white dark:text-slate-200">{auditResults.simulations?.extractedDate ?? '—'}</strong>
                     </div>
                   </div>
 
+                  {/* ── Gmail / Gemini ── */}
                   <div className={`flex flex-col justify-between space-y-3 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between border-b border-[#405E69]/30 pb-2">
                         <span className="text-xs font-bold text-blue-400">Gmail with Gemini</span>
                         <span className="rounded bg-blue-900/40 px-2 py-0.5 font-mono text-[10px] text-blue-300">Top-of-Thread</span>
                       </div>
-                      <ul className="space-y-1.5 text-xs">
-                        {auditResults.simulations.gemini.map((b, i) => (
-                          <li key={i} className="flex items-start space-x-1.5">
-                            <span className="font-bold text-blue-400">•</span>
-                            <span className="leading-snug">{b}</span>
-                          </li>
-                        ))}
-                      </ul>
+                      {simulationsLoading ? (
+                        <div className="flex items-center space-x-2 py-2">
+                          <svg className="h-3.5 w-3.5 animate-spin text-blue-400" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                          <span className="text-[11px] text-blue-300 italic">Gemini is generating highlights…</span>
+                        </div>
+                      ) : (
+                        <ul className="space-y-1.5 text-xs">
+                          {(auditResults.simulations?.gemini ?? []).map((b, i) => (
+                            <li key={i} className="flex items-start space-x-1.5">
+                              <span className="font-bold text-blue-400">•</span>
+                              <span className="leading-snug">{b}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     <div className={`border-t border-[#405E69]/30 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Detected Amount: <strong className="text-white dark:text-slate-200">{auditResults.simulations.extractedAmount}</strong>
+                      Detected Amount: <strong className="text-white dark:text-slate-200">{auditResults.simulations?.extractedAmount ?? '—'}</strong>
                     </div>
                   </div>
 
+                  {/* ── Outlook Copilot ── */}
                   <div className={`flex flex-col justify-between space-y-3 rounded-xl border p-4 ${darkMode ? 'border-[#405E69] bg-[#002837]/80' : 'border-[#BFC9CE] bg-slate-50'}`}>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between border-b border-[#405E69]/30 pb-2">
                         <span className="text-xs font-bold text-purple-400">Outlook Copilot</span>
                         <span className="rounded bg-purple-900/40 px-2 py-0.5 font-mono text-[10px] text-purple-300">Summary Card</span>
                       </div>
-                      <p className="text-xs leading-relaxed">{auditResults.simulations.copilot}</p>
+                      {simulationsLoading ? (
+                        <div className="flex items-center space-x-2 py-2">
+                          <svg className="h-3.5 w-3.5 animate-spin text-purple-400" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                          </svg>
+                          <span className="text-[11px] text-purple-300 italic">Copilot is drafting the summary card…</span>
+                        </div>
+                      ) : (
+                        <p className="text-xs leading-relaxed">{auditResults.simulations?.copilot}</p>
+                      )}
                     </div>
                     <div className={`border-t border-[#405E69]/30 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Extracted CTA: <strong className="text-white dark:text-slate-200">{auditResults.simulations.extractedCta}</strong>
+                      Extracted CTA: <strong className="text-white dark:text-slate-200">{auditResults.simulations?.extractedCta ?? '—'}</strong>
                     </div>
                   </div>
+
+                  {/* ── Error / API key notice ── */}
+                  {simulationsError && (
+                    <div className="md:col-span-3 flex items-start space-x-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{simulationsError}</span>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className={`rounded-xl border border-dashed p-8 text-center ${darkMode ? 'border-[#405E69] text-[#80949B]' : 'border-[#BFC9CE] text-slate-400'}`}>
@@ -1319,25 +2257,85 @@ export default function App() {
               </div>
 
               <div className="mt-8 space-y-3">
+                <h3 className="border-b border-slate-200 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">
+                  Primary Call to Action (CTA) & Visual Contrast Audit (Pillars 10 & 08)
+                </h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <strong className="block text-xs font-bold text-slate-900">Identified Primary CTA</strong>
+                    <p className="text-sm font-black text-[#741532]">
+                      "{hasCalculated && auditResults?.ctaAnalysis?.isDetected ? auditResults.ctaAnalysis.primaryCtaText : 'No CTA detected'}"
+                    </p>
+                    <p className="text-[11px] text-slate-600">
+                      {hasCalculated && auditResults?.ctaAnalysis ? auditResults.ctaAnalysis.clarityRating : 'Pending calculation'}
+                    </p>
+                    {hasCalculated && auditResults?.ctaAnalysis?.competingCount > 0 && (
+                      <p className="text-[10px] text-slate-500">
+                        {auditResults.ctaAnalysis.competingCount} secondary actions detected.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <strong className="block text-xs font-bold text-slate-900">Placement & Fold Position</strong>
+                    <p className="text-xs font-bold text-slate-800">
+                      {hasCalculated && auditResults?.ctaAnalysis ? auditResults.ctaAnalysis.placementBadge : 'Pending calculation'}
+                    </p>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      {hasCalculated && auditResults?.ctaAnalysis ? auditResults.ctaAnalysis.placementGuidance : '—'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <strong className="block text-xs font-bold text-slate-900">WCAG 2.1 Contrast Ratio</strong>
+                    <p className="text-xs font-bold text-slate-800">
+                      {hasCalculated && auditResults?.ctaAnalysis?.contrastRatio
+                        ? `${auditResults.ctaAnalysis.contrastRatio}:1 (${auditResults.ctaAnalysis.wcag.label})`
+                        : 'Unverified in copy (Requires HTML styles or design scan)'}
+                    </p>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      {hasCalculated && auditResults?.ctaAnalysis?.contrastRatio
+                        ? auditResults.ctaAnalysis.wcag.description
+                        : 'WCAG AA requires minimum 4.5:1 contrast for standard text and 3.0:1 for large/bold text.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 space-y-3">
                 <h3 className="border-b border-slate-200 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">Observed AI Inbox Extract Simulations</h3>
                 <p className="text-[11px] italic text-slate-500">Note: Inbox summaries are estimated based on observed LLM behavior (Apple Intelligence, Gemini, Outlook Copilot).</p>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <strong className="block text-xs font-bold text-slate-900">Apple Mail Summary</strong>
-                    <p className="text-xs text-slate-700 italic">"{hasCalculated && auditResults ? auditResults.simulations.apple : 'Pending generation.'}"</p>
+                    {simulationsLoading ? (
+                      <p className="text-xs italic text-slate-400">Generating…</p>
+                    ) : (
+                      <p className="text-xs text-slate-700 italic">"{hasCalculated && auditResults ? auditResults.simulations?.apple : 'Pending generation.'}"</p>
+                    )}
                   </div>
 
                   <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <strong className="block text-xs font-bold text-slate-900">Gmail Gemini Highlights</strong>
                     <ul className="space-y-1 text-xs text-slate-700">
-                      {hasCalculated && auditResults ? auditResults.simulations.gemini.map((b, i) => <li key={i}>• {b}</li>) : <li>• Pending generation.</li>}
+                      {simulationsLoading ? (
+                        <li className="italic text-slate-400">Generating…</li>
+                      ) : hasCalculated && auditResults ? (
+                        auditResults.simulations?.gemini.map((b, i) => <li key={i}>• {b}</li>)
+                      ) : (
+                        <li>• Pending generation.</li>
+                      )}
                     </ul>
                   </div>
 
                   <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-4">
                     <strong className="block text-xs font-bold text-slate-900">Outlook Copilot Card</strong>
-                    <p className="text-xs text-slate-700">{hasCalculated && auditResults ? auditResults.simulations.copilot : 'Pending generation.'}</p>
+                    {simulationsLoading ? (
+                      <p className="text-xs italic text-slate-400">Generating…</p>
+                    ) : (
+                      <p className="text-xs text-slate-700">{hasCalculated && auditResults ? auditResults.simulations?.copilot : 'Pending generation.'}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1636,16 +2634,95 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className={`space-y-1.5 rounded-xl border p-4 ${darkMode ? 'border-[#741532] bg-[#4D1B34]/30' : 'border-rose-200 bg-rose-50'}`}>
-                      <span className="flex items-center space-x-1.5 text-xs font-bold text-rose-300">
-                        <Target className="h-3.5 w-3.5 text-[#FF002D]" />
-                        <span>CTA Detected in Design</span>
-                      </span>
-                      <p className="leading-relaxed">{creativeFindings.ctaRecommendation}</p>
-                      <div className="grid grid-cols-1 gap-2 border-t border-[#741532]/40 pt-2 sm:grid-cols-3">
-                        <p>Button shape: <strong>{creativeFindings.ctaButton ? (creativeFindings.ctaButton.buttonLike ? 'detected' : 'not detected') : 'not assessable'}</strong></p>
-                        <p>Standout fill: <strong>{creativeFindings.ctaButton ? (creativeFindings.ctaButton.standoutColor ? creativeFindings.ctaButton.fillColor : 'not detected') : 'not assessable'}</strong></p>
-                        <p>Text contrast: <strong>{creativeFindings.ctaButton?.contrastRatio ? `${creativeFindings.ctaButton.contrastRatio}:1${creativeFindings.ctaButton.contrastRatio >= 4.5 ? ' (pass)' : ' (low)'}` : 'not assessable'}</strong></p>
+                    <div className={`space-y-3 rounded-xl border p-4 ${darkMode ? 'border-[#741532] bg-[#4D1B34]/30' : 'border-rose-200 bg-rose-50'}`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#741532]/40 pb-2.5">
+                        <span className="flex items-center space-x-1.5 text-xs font-bold text-rose-300">
+                          <Target className="h-4 w-4 text-[#FF002D]" />
+                          <span>Call to Action (CTA) Identified in Design</span>
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-black text-rose-200">
+                            "{creativeFindings.ctaText}"
+                          </span>
+                          {creativeFindings.ctaButton?.buttonWidth && (
+                            <span className="rounded bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-[#BFC9CE]">
+                              {creativeFindings.ctaButton.buttonWidth} × {creativeFindings.ctaButton.buttonHeight}px
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="text-xs leading-relaxed">{creativeFindings.ctaRecommendation}</p>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 border-t border-[#741532]/40 pt-3 text-xs">
+                        {/* Placement */}
+                        <div className="space-y-1">
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Placement & Fold</span>
+                          <p className="font-bold">
+                            {creativeFindings.ctaButton?.placementLabel || 'Not assessed'}
+                          </p>
+                          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
+                            creativeFindings.ctaButton?.foldVerdict === 'above_fold'
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : creativeFindings.ctaButton?.foldVerdict === 'mid_body'
+                                ? 'bg-amber-500/20 text-amber-300'
+                                : 'bg-[#FF002D]/20 text-rose-300'
+                          }`}>
+                            {creativeFindings.ctaButton?.foldVerdict === 'above_fold' ? 'Optimal (Above Fold)' : creativeFindings.ctaButton?.foldVerdict === 'mid_body' ? 'Mid-Section' : 'High Risk (Below Fold)'}
+                          </span>
+                        </div>
+
+                        {/* WCAG Contrast */}
+                        <div className="space-y-1">
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">WCAG Contrast</span>
+                          <div className="flex items-center space-x-1.5">
+                            <span className="font-black text-sm">
+                              {creativeFindings.ctaButton?.contrastRatio ? `${creativeFindings.ctaButton.contrastRatio}:1` : 'Not assessable'}
+                            </span>
+                            {creativeFindings.ctaButton?.wcagEvaluation && (
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${creativeFindings.ctaButton.wcagEvaluation.badgeBg} ${creativeFindings.ctaButton.wcagEvaluation.badgeText}`}>
+                                {creativeFindings.ctaButton.wcagEvaluation.label}
+                              </span>
+                            )}
+                          </div>
+                          {creativeFindings.ctaButton?.fillColor && creativeFindings.ctaButton?.textColor && (
+                            <div className="flex items-center space-x-1.5 text-[10px] font-mono">
+                              <span className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: creativeFindings.ctaButton.textColor }} />
+                              <span>{creativeFindings.ctaButton.textColor}</span>
+                              <span className="text-slate-400">on</span>
+                              <span className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: creativeFindings.ctaButton.fillColor }} />
+                              <span>{creativeFindings.ctaButton.fillColor}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Tap Target */}
+                        <div className="space-y-1">
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Touch Tap Target</span>
+                          <p className="font-bold">
+                            {creativeFindings.ctaButton?.buttonHeight ? `${creativeFindings.ctaButton.buttonHeight}px height` : 'Not assessable'}
+                          </p>
+                          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
+                            creativeFindings.ctaButton?.touchTargetMeetsStandard
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-amber-500/20 text-amber-300'
+                          }`}>
+                            {creativeFindings.ctaButton?.touchTargetMeetsStandard ? 'Pass (≥44px Standard)' : 'Sub-44px (Small target)'}
+                          </span>
+                        </div>
+
+                        {/* Prominence */}
+                        <div className="space-y-1">
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Visual Prominence</span>
+                          <p className="font-bold">
+                            {creativeFindings.ctaButton?.buttonLike ? 'Button-shaped container' : 'Text-link style'}
+                          </p>
+                          <p className="text-[10px] text-slate-300 dark:text-slate-400">
+                            {creativeFindings.ctaButton?.standoutColor
+                              ? `Standout fill (${creativeFindings.ctaButton.fillColor}) distinguishes action from background.`
+                              : 'Button lacks high-chroma standout fill against canvas.'}
+                          </p>
+                        </div>
                       </div>
                     </div>
 

@@ -1,7 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  signInWithCustomToken,
-  signInAnonymously,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
@@ -10,7 +8,6 @@ import {
   onAuthStateChanged,
 } from 'firebase/auth';
 import {
-  collection,
   doc,
   getDoc,
   setDoc,
@@ -46,9 +43,7 @@ import {
   Smartphone,
   X,
   Lock,
-  User,
   LogOut,
-  ShieldAlert,
   RotateCcw,
 } from 'lucide-react';
 
@@ -653,7 +648,6 @@ export default function App() {
   const [auditStep, setAuditStep] = useState('metadata');
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState('campaign_manager');
-  const [authLoading, setAuthLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [authEmail, setAuthEmail] = useState('');
@@ -664,7 +658,6 @@ export default function App() {
   const [selectedSource, setSelectedSource] = useState(DEFAULT_SOURCES[0]);
   const [isAddRuleModalOpen, setIsAddRuleModalOpen] = useState(false);
   const [newRule, setNewRule] = useState({ pillarIndex: 1, title: '', desc: '', weight: 7 });
-  const [isSavingMethodology, setIsSavingMethodology] = useState(false);
   const [methodologyStatusMsg, setMethodologyStatusMsg] = useState('');
   const [expandedPillars, setExpandedPillars] = useState({ 1: false, 2: false, 3: false });
   const [manualChecks, setManualChecks] = useState(() => Object.fromEntries(MANUAL_CHECKPOINTS.map(({ id }) => [id, false])));
@@ -705,7 +698,6 @@ export default function App() {
       if (!currentUser) {
         setUser(null);
         setUserRole('campaign_manager');
-        setAuthLoading(false);
         return;
       }
 
@@ -738,8 +730,6 @@ export default function App() {
       } catch (error) {
         console.error('Could not load the signed-in user profile:', error);
         setUserRole(isSuperAdmin ? 'admin' : 'campaign_manager');
-      } finally {
-        setAuthLoading(false);
       }
     });
 
@@ -1188,6 +1178,8 @@ export default function App() {
         : null;
       const vagueCta = callToAction && /click here|learn more|explore more|find out more/i.test(callToAction);
 
+      const designCtaAnalysis = analyzeEmailCta(emailCopy || callToAction, ctaButton);
+
       setCreativeFindings({
         pagesScanned: canvases.length,
         styleGuidePagesScanned: styleGuideCanvases.length,
@@ -1204,6 +1196,7 @@ export default function App() {
         preheaderMatch,
         ctaText: callToAction || (ctaButton?.buttonLike ? 'Button-like block detected; CTA label not readable' : 'No CTA text detected'),
         ctaButton,
+        ctaAnalysis: designCtaAnalysis,
         colorAdherence: expectedColors.length
           ? `${matchedColors.length} of ${expectedColors.length} reference colors were found in the final design palette.`
           : 'No usable colors were found in the style guide or typed brief, so palette matching was not assessed.',
@@ -1223,16 +1216,13 @@ export default function App() {
       setDesignScanStatus('Design scan complete.');
 
       // If Audit Studio score has been calculated, synchronize with design-verified visual scan
-      if (emailCopy.trim()) {
-        setAuditResults((prev) => {
-          if (!prev) return prev;
-          const updatedCta = analyzeEmailCta(emailCopy, ctaButton);
-          return {
-            ...prev,
-            ctaAnalysis: updatedCta,
-          };
-        });
-      }
+      setAuditResults((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          ctaAnalysis: designCtaAnalysis,
+        };
+      });
     } catch (error) {
       setDesignScanStatus(`Scan failed: ${error.message || 'The design could not be scanned.'}`);
     } finally {
@@ -1343,8 +1333,8 @@ export default function App() {
       return;
     }
 
-    // Run robust CTA & contrast analysis engine
-    const ctaAnalysis = analyzeEmailCta(emailCopy, creativeFindings?.ctaButton);
+    // In Email Copy Audit Studio, visual contrast architecture only applies if a design has been uploaded
+    const ctaAnalysis = creativeFindings?.ctaButton ? analyzeEmailCta(emailCopy, creativeFindings.ctaButton) : null;
 
     const evaluatedRules = rules.map((rule) => {
       const checkpoint = MANUAL_CHECKPOINTS.find((item) => item.ruleId === rule.id);
@@ -1364,40 +1354,50 @@ export default function App() {
           status = 'pass';
           earned = rule.weight;
           reason = 'Confirmed by the reviewer using the manual checkpoint.';
-        } else if (ctaAnalysis.isDetected) {
+        } else if (ctaAnalysis && ctaAnalysis.isDetected) {
           if (ctaAnalysis.foldVerdict === 'above_fold' && !ctaAnalysis.isVague && ctaAnalysis.competingCount <= 1) {
             pass = true;
             status = 'pass';
             earned = rule.weight;
-            reason = `Optimal: Primary CTA "${ctaAnalysis.primaryCtaText}" detected above the fold (${ctaAnalysis.placementBadge}) with single focal action intent.`;
+            reason = `Optimal: Primary CTA "${ctaAnalysis.primaryCtaText}" confirmed above the fold (${ctaAnalysis.placementBadge}) in design scan.`;
           } else {
             pass = false;
             status = 'warning';
             earned = Math.round(rule.weight * 0.5);
-            reason = `CTA "${ctaAnalysis.primaryCtaText}" detected, but ${ctaAnalysis.flawReason}. Review placement and clarity.`;
+            reason = `CTA "${ctaAnalysis.primaryCtaText}" detected in design. Review placement and clarity.`;
           }
         } else {
           pass = false;
-          status = 'alert';
-          earned = 0;
-          reason = 'No clear call to action or button element was detected in the submitted copy.';
+          status = 'warning';
+          earned = Math.round(rule.weight * 0.5);
+          reason = 'Visual CTA prominence and fold placement are verified upon uploading a design in Creative Review.';
         }
       }
 
       // Rule 8: Accessibility Is Good Design (contrast integration)
       if (rule.id === 'r8' && !checkpoint) {
-        if (ctaAnalysis.contrastRatio !== null) {
+        if (ctaAnalysis && ctaAnalysis.contrastRatio !== null) {
           if (ctaAnalysis.contrastRatio < 3.0) {
             pass = false;
             status = 'alert';
             earned = 0;
-            reason = `Accessibility alert: CTA button contrast (${ctaAnalysis.contrastRatio}:1) fails WCAG AA minimum threshold (4.5:1).`;
+            reason = `Accessibility alert: Design CTA contrast (${ctaAnalysis.contrastRatio}:1) fails WCAG AA minimum threshold (4.5:1).`;
           } else if (ctaAnalysis.contrastRatio >= 4.5) {
             pass = true;
             status = 'pass';
             earned = rule.weight;
-            reason = `Confirmed: CTA button contrast (${ctaAnalysis.contrastRatio}:1) satisfies WCAG 2.1 AA requirements.`;
+            reason = `Confirmed: Design CTA contrast (${ctaAnalysis.contrastRatio}:1) satisfies WCAG 2.1 AA requirements.`;
+          } else {
+            pass = false;
+            status = 'warning';
+            earned = Math.round(rule.weight * 0.5);
+            reason = `Design CTA contrast (${ctaAnalysis.contrastRatio}:1) is below WCAG AA standard (4.5:1).`;
           }
+        } else {
+          pass = false;
+          status = 'warning';
+          earned = Math.round(rule.weight * 0.5);
+          reason = 'Visual contrast ratio is verified upon uploading a design in Creative Review.';
         }
       }
 
@@ -1458,8 +1458,6 @@ export default function App() {
       setSimulationsLoading(false);
     }
   };
-
-  const teamPermissionsOpen = () => setIsTeamModalOpen(true);
 
   return (
     <div className={`min-h-screen font-sans transition-colors duration-200 ${darkMode ? 'bg-[#001D27] text-slate-100' : 'bg-[#EEF1F6] text-slate-900'}`}>
@@ -1848,235 +1846,6 @@ export default function App() {
               )}
             </div>
 
-            {hasCalculated && auditResults?.ctaAnalysis && (
-              <div className={`section-card space-y-5 rounded-2xl border-0 p-6 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                {/* Header */}
-                <div className="flex flex-col justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-4 sm:flex-row sm:items-center">
-                  <div className="flex items-center space-x-3">
-                    <div className="rounded-xl border-0 bg-[#4D1B34] p-2.5 text-white shadow-xs">
-                      <Target className="h-5 w-5 text-[#FF002D]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <h3 className="text-sm font-bold uppercase tracking-wider">CTA & Visual Contrast Architecture</h3>
-                        <span className="rounded bg-[#741532]/40 px-2 py-0.5 font-mono text-[10px] text-rose-300">
-                          Pillars 10 & 08
-                        </span>
-                      </div>
-                      <p className={`text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                        Call-to-action identification, placement fold analysis, and WCAG 2.1 AA luminance contrast verification.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    {auditResults.ctaAnalysis.isDetected ? (
-                      <span className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>CTA Identified</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center space-x-1.5 rounded-full bg-[#FF002D]/10 px-3 py-1 text-xs font-bold text-[#FF002D]">
-                        <AlertOctagon className="h-3.5 w-3.5" />
-                        <span>No CTA Detected</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Primary CTA Outline Banner */}
-                <div className={`rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/5 dark:border-white/5 pb-3">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Primary Call to Action</span>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                        <span className="text-base font-black text-[#FF002D] dark:text-rose-400">
-                          "{auditResults.ctaAnalysis.primaryCtaText}"
-                        </span>
-                        <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${darkMode ? 'bg-[#072E3D] text-[#BFC9CE]' : 'bg-white text-slate-700 shadow-xs'}`}>
-                          {auditResults.ctaAnalysis.type === 'html_button' ? 'HTML Button Element' : auditResults.ctaAnalysis.type === 'html_link' ? 'HTML Link' : auditResults.ctaAnalysis.type === 'bracket_cta' ? 'Emphasized CTA' : auditResults.ctaAnalysis.type === 'markdown_link' ? 'Markdown Link' : 'Copy Action Phrase'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Visual contrast sample pill if colors detected */}
-                    {auditResults.ctaAnalysis.fillColor && auditResults.ctaAnalysis.textColor && (
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[10px] text-[#80949B]">Rendered Appearance:</span>
-                        <div
-                          className="rounded-lg px-3 py-1 text-xs font-bold shadow-xs"
-                          style={{
-                            backgroundColor: auditResults.ctaAnalysis.fillColor,
-                            color: auditResults.ctaAnalysis.textColor,
-                          }}
-                        >
-                          {auditResults.ctaAnalysis.primaryCtaText.slice(0, 24)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {auditResults.ctaAnalysis.competingCount > 0 && (
-                    <div className="mt-2.5 text-xs text-[#80949B]">
-                      <span className="font-semibold text-slate-300 dark:text-slate-200">Secondary / Competing Actions Detected ({auditResults.ctaAnalysis.competingCount}):</span>{' '}
-                      {auditResults.ctaAnalysis.competingCtas.map((c, i) => (
-                        <span key={i} className="inline-block rounded bg-slate-800/60 px-1.5 py-0.5 text-[11px] font-mono mr-1.5 text-slate-300">
-                          "{c}"
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* 4-Metric Diagnostic Grid */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  {/* 1. Placement & Fold Position */}
-                  <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Placement & Fold</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        auditResults.ctaAnalysis.foldVerdict === 'above_fold'
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : auditResults.ctaAnalysis.foldVerdict === 'mid_body'
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-[#FF002D]/20 text-[#FF002D]'
-                      }`}>
-                        {auditResults.ctaAnalysis.foldVerdict === 'above_fold' ? 'Optimal' : auditResults.ctaAnalysis.foldVerdict === 'mid_body' ? 'Acceptable' : 'High Risk'}
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold">{auditResults.ctaAnalysis.placementBadge}</p>
-                    
-                    {/* Fold progress bar */}
-                    <div className="space-y-1">
-                      <div className="relative h-2 w-full rounded-full bg-slate-700/30">
-                        <div
-                          className={`h-full rounded-full ${auditResults.ctaAnalysis.foldVerdict === 'above_fold' ? 'bg-emerald-500' : auditResults.ctaAnalysis.foldVerdict === 'mid_body' ? 'bg-amber-500' : 'bg-[#FF002D]'}`}
-                          style={{ width: `${Math.min(100, Math.max(5, auditResults.ctaAnalysis.placementPercent))}%` }}
-                        />
-                        <div className="absolute top-0 bottom-0 left-[40%] w-0.5 bg-white/40" title="40% Fold line" />
-                      </div>
-                      <div className="flex justify-between text-[9px] text-[#80949B]">
-                        <span>Top (0%)</span>
-                        <span className="text-slate-400">Fold (40%)</span>
-                        <span>Bottom (100%)</span>
-                      </div>
-                    </div>
-                    <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      {auditResults.ctaAnalysis.placementGuidance}
-                    </p>
-                  </div>
-
-                  {/* 2. WCAG Contrast Ratio */}
-                  <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Contrast Ratio</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${auditResults.ctaAnalysis.wcag.badgeBg} ${auditResults.ctaAnalysis.wcag.badgeText}`}>
-                        {auditResults.ctaAnalysis.wcag.label}
-                      </span>
-                    </div>
-                    <div className="flex items-baseline space-x-1.5">
-                      <span className="text-2xl font-black">
-                        {auditResults.ctaAnalysis.contrastRatio ? `${auditResults.ctaAnalysis.contrastRatio}:1` : '—'}
-                      </span>
-                      <span className="text-[10px] text-[#80949B]">
-                        {auditResults.ctaAnalysis.contrastRatio ? '(WCAG AA min: 4.5:1)' : 'Pending verification'}
-                      </span>
-                    </div>
-                    {auditResults.ctaAnalysis.contrastRatio ? (
-                      <div className="flex items-center space-x-2 text-[11px] font-mono">
-                        <span className="inline-flex items-center space-x-1">
-                          <span className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: auditResults.ctaAnalysis.textColor || '#fff' }} />
-                          <span>{auditResults.ctaAnalysis.textColor}</span>
-                        </span>
-                        <span className="text-slate-500">on</span>
-                        <span className="inline-flex items-center space-x-1">
-                          <span className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: auditResults.ctaAnalysis.fillColor || '#000' }} />
-                          <span>{auditResults.ctaAnalysis.fillColor}</span>
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-amber-400">
-                        Unverified in text copy. Add HTML styles or run Creative Review scan.
-                      </p>
-                    )}
-                    <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      {auditResults.ctaAnalysis.wcag.description}
-                    </p>
-                  </div>
-
-                  {/* 3. Action Clarity */}
-                  <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Action Clarity</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        auditResults.ctaAnalysis.isVague
-                          ? 'bg-amber-500/20 text-amber-400'
-                          : auditResults.ctaAnalysis.isDetected
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-slate-700 text-slate-400'
-                      }`}>
-                        {auditResults.ctaAnalysis.isVague ? 'Refine' : auditResults.ctaAnalysis.isDetected ? 'High Intent' : 'Missing'}
-                      </span>
-                    </div>
-                    <p className="text-sm font-bold">{auditResults.ctaAnalysis.clarityRating}</p>
-                    <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      {auditResults.ctaAnalysis.isVague
-                        ? 'Generic phrases like "click here" or "learn more" decrease conversion. Action verbs coupled with a tangible benefit increase click propensity.'
-                        : 'Specific, benefit-driven call to action. Directly signals to the reader what outcome to expect upon clicking.'}
-                    </p>
-                  </div>
-
-                  {/* 4. Single-Action Focus (Pillar 10) */}
-                  <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Focus & Hierarchy</span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        auditResults.ctaAnalysis.competingCount === 0
-                          ? 'bg-emerald-500/20 text-emerald-400'
-                          : auditResults.ctaAnalysis.competingCount <= 2
-                            ? 'bg-amber-500/20 text-amber-400'
-                            : 'bg-[#FF002D]/20 text-[#FF002D]'
-                      }`}>
-                        {auditResults.ctaAnalysis.competingCount === 0 ? 'Single Intent' : `${auditResults.ctaAnalysis.competingCount + 1} Actions`}
-                      </span>
-                    </div>
-                    <div className="flex items-baseline space-x-1.5">
-                      <span className="text-2xl font-black">{auditResults.ctaAnalysis.totalCtasFound}</span>
-                      <span className="text-[10px] text-[#80949B]">actions detected</span>
-                    </div>
-                    <p className={`text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      {auditResults.ctaAnalysis.competingCount === 0
-                        ? 'Optimal: Follows Pillar 10 ("One Message. One Clear Action"). Eliminates decision fatigue.'
-                        : auditResults.ctaAnalysis.competingCount <= 2
-                          ? 'Acceptable: Primary goal supported by secondary choice. Ensure primary button visually dominates.'
-                          : 'High Friction: Multiple unranked CTAs compete for clicks. Recommended to consolidate to one primary focal goal.'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Scan link banner if unverified */}
-                {auditResults.ctaAnalysis.contrastSource !== 'design_scan' && (
-                  <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border-0 px-4 py-3 text-xs ${darkMode ? 'bg-[#002230] text-[#BFC9CE]' : 'bg-[#F4F6F9] text-slate-700'}`}>
-                    <div className="flex items-center space-x-2">
-                      <Info className="h-4 w-4 shrink-0 text-amber-400" />
-                      <span>
-                        {auditResults.ctaAnalysis.contrastSource === 'html_styles'
-                          ? 'Contrast was calculated from HTML inline styles. For pixel-accurate render testing across email clients, run Creative Review.'
-                          : 'Physical visual contrast is unverified from copy alone. Upload your rendered design in Creative Review to test pixel-level contrast and button geometry.'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('creative')}
-                      className="shrink-0 rounded-lg bg-[#405E69] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#741532] transition-colors"
-                    >
-                      Open Creative Review →
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
               <div className="flex flex-col justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-4 md:flex-row md:items-center">
                 <div className="flex items-center space-x-2.5">
@@ -2266,12 +2035,12 @@ export default function App() {
                   <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">Identified Primary CTA</strong>
                     <p className="text-sm font-black text-[#741532]">
-                      "{hasCalculated && auditResults?.ctaAnalysis?.isDetected ? auditResults.ctaAnalysis.primaryCtaText : 'No CTA detected'}"
+                      "{creativeFindings?.ctaText || (auditResults?.ctaAnalysis?.isDetected ? auditResults.ctaAnalysis.primaryCtaText : 'Pending design scan')}"
                     </p>
                     <p className="text-[11px] text-slate-600">
-                      {hasCalculated && auditResults?.ctaAnalysis ? auditResults.ctaAnalysis.clarityRating : 'Pending calculation'}
+                      {creativeFindings?.ctaButton ? 'Verified in final design scan' : 'Upload final design in Creative Review to audit'}
                     </p>
-                    {hasCalculated && auditResults?.ctaAnalysis?.competingCount > 0 && (
+                    {auditResults?.ctaAnalysis?.competingCount > 0 && (
                       <p className="text-[10px] text-slate-500">
                         {auditResults.ctaAnalysis.competingCount} secondary actions detected.
                       </p>
@@ -2281,24 +2050,22 @@ export default function App() {
                   <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">Placement & Fold Position</strong>
                     <p className="text-xs font-bold text-slate-800">
-                      {hasCalculated && auditResults?.ctaAnalysis ? auditResults.ctaAnalysis.placementBadge : 'Pending calculation'}
+                      {creativeFindings?.ctaButton?.placementLabel || 'Pending design scan'}
                     </p>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      {hasCalculated && auditResults?.ctaAnalysis ? auditResults.ctaAnalysis.placementGuidance : '—'}
+                      {creativeFindings?.ctaButton?.placementGuidance || 'Button fold placement based on vertical canvas coordinates in Creative Review.'}
                     </p>
                   </div>
 
                   <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
                     <strong className="block text-xs font-bold text-slate-900">WCAG 2.1 Contrast Ratio</strong>
                     <p className="text-xs font-bold text-slate-800">
-                      {hasCalculated && auditResults?.ctaAnalysis?.contrastRatio
-                        ? `${auditResults.ctaAnalysis.contrastRatio}:1 (${auditResults.ctaAnalysis.wcag.label})`
-                        : 'Unverified in copy (Requires HTML styles or design scan)'}
+                      {creativeFindings?.ctaButton?.contrastRatio
+                        ? `${creativeFindings.ctaButton.contrastRatio}:1 (${creativeFindings.ctaButton.wcagEvaluation?.label || 'Verified'})`
+                        : 'Pending design scan in Creative Review'}
                     </p>
                     <p className="text-[11px] text-slate-600 leading-relaxed">
-                      {hasCalculated && auditResults?.ctaAnalysis?.contrastRatio
-                        ? auditResults.ctaAnalysis.wcag.description
-                        : 'WCAG AA requires minimum 4.5:1 contrast for standard text and 3.0:1 for large/bold text.'}
+                      {creativeFindings?.ctaButton?.wcagEvaluation?.description || 'Requires uploading the final rendered design in Creative Review to verify pixel-level contrast.'}
                     </p>
                   </div>
                 </div>
@@ -2636,92 +2403,191 @@ export default function App() {
                       )}
                     </div>
 
-                    <div className={`space-y-3 rounded-xl border-0 p-4.5 ${darkMode ? 'bg-[#4D1B34]/30' : 'bg-rose-50/70'}`}>
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/5 dark:border-white/5 pb-2.5">
-                        <span className="flex items-center space-x-1.5 text-xs font-bold text-rose-500 dark:text-rose-300">
-                          <Target className="h-4 w-4 text-[#FF002D]" />
-                          <span>Call to Action (CTA) Identified in Design</span>
-                        </span>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-black text-rose-600 dark:text-rose-200">
-                            "{creativeFindings.ctaText}"
-                          </span>
-                          {creativeFindings.ctaButton?.buttonWidth && (
-                            <span className="rounded bg-black/10 dark:bg-black/40 px-1.5 py-0.5 font-mono text-[10px] text-slate-700 dark:text-[#BFC9CE]">
-                              {creativeFindings.ctaButton.buttonWidth} × {creativeFindings.ctaButton.buttonHeight}px
+                    {/* CTA & Visual Contrast Architecture (Pillars 10 & 08) */}
+                    <div className={`space-y-4 rounded-xl border-0 p-5 shadow-xs ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
+                      {/* Header */}
+                      <div className="flex flex-col justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-3 sm:flex-row sm:items-center">
+                        <div className="flex items-center space-x-2.5">
+                          <div className="rounded-xl border-0 bg-[#4D1B34] p-2 text-white shadow-xs">
+                            <Target className="h-4 w-4 text-[#FF002D]" />
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <h4 className="text-xs font-bold uppercase tracking-wider">CTA & Visual Contrast Architecture</h4>
+                              <span className="rounded bg-[#741532]/40 px-2 py-0.5 font-mono text-[9px] text-rose-300">
+                                Pillars 10 & 08
+                              </span>
+                            </div>
+                            <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                              Verified from rendered design canvas, OCR bounding box geometry, and WCAG luminance calculations.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div>
+                          {creativeFindings.ctaButton ? (
+                            <span className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-400">
+                              <CheckCircle2 className="h-3 w-3" />
+                              <span>CTA Identified in Design</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1.5 rounded-full bg-[#FF002D]/10 px-2.5 py-1 text-[11px] font-bold text-[#FF002D]">
+                              <AlertOctagon className="h-3 w-3" />
+                              <span>No CTA Detected</span>
                             </span>
                           )}
                         </div>
                       </div>
 
-                      <p className="text-xs leading-relaxed">{creativeFindings.ctaRecommendation}</p>
-
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 border-t border-black/5 dark:border-white/5 pt-3 text-xs">
-                        {/* Placement */}
-                        <div className="space-y-1">
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Placement & Fold</span>
-                          <p className="font-bold">
-                            {creativeFindings.ctaButton?.placementLabel || 'Not assessed'}
-                          </p>
-                          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
-                            creativeFindings.ctaButton?.foldVerdict === 'above_fold'
-                              ? 'bg-emerald-500/20 text-emerald-400 dark:text-emerald-300'
-                              : creativeFindings.ctaButton?.foldVerdict === 'mid_body'
-                                ? 'bg-amber-500/20 text-amber-500 dark:text-amber-300'
-                                : 'bg-[#FF002D]/20 text-rose-500 dark:text-rose-300'
-                          }`}>
-                            {creativeFindings.ctaButton?.foldVerdict === 'above_fold' ? 'Optimal (Above Fold)' : creativeFindings.ctaButton?.foldVerdict === 'mid_body' ? 'Mid-Section' : 'High Risk (Below Fold)'}
-                          </span>
-                        </div>
-
-                        {/* WCAG Contrast */}
-                        <div className="space-y-1">
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">WCAG Contrast</span>
-                          <div className="flex items-center space-x-1.5">
-                            <span className="font-black text-sm">
-                              {creativeFindings.ctaButton?.contrastRatio ? `${creativeFindings.ctaButton.contrastRatio}:1` : 'Not assessable'}
-                            </span>
-                            {creativeFindings.ctaButton?.wcagEvaluation && (
-                              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${creativeFindings.ctaButton.wcagEvaluation.badgeBg} ${creativeFindings.ctaButton.wcagEvaluation.badgeText}`}>
-                                creativeFindings.ctaButton.wcagEvaluation.label
+                      {/* Primary CTA Outline Banner */}
+                      <div className={`rounded-xl border-0 p-3.5 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/5 dark:border-white/5 pb-2.5">
+                          <div>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-[#80949B]">Primary Call to Action</span>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-black text-[#FF002D] dark:text-rose-400">
+                                "{creativeFindings.ctaText}"
                               </span>
-                            )}
+                              {creativeFindings.ctaButton?.buttonWidth && (
+                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${darkMode ? 'bg-[#002230] text-[#BFC9CE]' : 'bg-slate-100 text-slate-700'}`}>
+                                  {creativeFindings.ctaButton.buttonWidth} × {creativeFindings.ctaButton.buttonHeight}px
+                                </span>
+                              )}
+                              <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${darkMode ? 'bg-[#002230] text-[#BFC9CE]' : 'bg-slate-100 text-slate-700'}`}>
+                                {creativeFindings.ctaButton?.buttonLike ? 'Button Element' : 'Text Action'}
+                              </span>
+                            </div>
                           </div>
+
                           {creativeFindings.ctaButton?.fillColor && creativeFindings.ctaButton?.textColor && (
-                            <div className="flex items-center space-x-1.5 text-[10px] font-mono">
-                              <span className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: creativeFindings.ctaButton.textColor }} />
-                              <span>{creativeFindings.ctaButton.textColor}</span>
-                              <span className="text-slate-400">on</span>
-                              <span className="h-3 w-3 rounded-full border border-white/20" style={{ backgroundColor: creativeFindings.ctaButton.fillColor }} />
-                              <span>{creativeFindings.ctaButton.fillColor}</span>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[10px] text-[#80949B]">Rendered Pill:</span>
+                              <div
+                                className="rounded-lg px-3 py-1 text-xs font-bold shadow-xs"
+                                style={{
+                                  backgroundColor: creativeFindings.ctaButton.fillColor,
+                                  color: creativeFindings.ctaButton.textColor,
+                                }}
+                              >
+                                {creativeFindings.ctaText.slice(0, 24)}
+                              </div>
                             </div>
                           )}
                         </div>
 
-                        {/* Tap Target */}
-                        <div className="space-y-1">
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Touch Tap Target</span>
-                          <p className="font-bold">
-                            {creativeFindings.ctaButton?.buttonHeight ? `${creativeFindings.ctaButton.buttonHeight}px height` : 'Not assessable'}
+                        <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                          {creativeFindings.ctaRecommendation}
+                        </p>
+                      </div>
+
+                      {/* 4-Metric Diagnostic Grid */}
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {/* 1. Placement & Fold Position */}
+                        <div className={`space-y-1.5 rounded-xl border-0 p-3 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Placement & Fold</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                              creativeFindings.ctaButton?.foldVerdict === 'above_fold'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : creativeFindings.ctaButton?.foldVerdict === 'mid_body'
+                                  ? 'bg-amber-500/20 text-amber-400'
+                                  : 'bg-[#FF002D]/20 text-[#FF002D]'
+                            }`}>
+                              {creativeFindings.ctaButton?.foldVerdict === 'above_fold' ? 'Optimal' : creativeFindings.ctaButton?.foldVerdict === 'mid_body' ? 'Acceptable' : 'High Risk'}
+                            </span>
+                          </div>
+                          <p className="text-xs font-bold">{creativeFindings.ctaButton?.placementLabel || 'Not assessed'}</p>
+                          
+                          {/* Fold progress bar */}
+                          <div className="space-y-1">
+                            <div className="relative h-1.5 w-full rounded-full bg-slate-700/30">
+                              <div
+                                className={`h-full rounded-full ${creativeFindings.ctaButton?.foldVerdict === 'above_fold' ? 'bg-emerald-500' : creativeFindings.ctaButton?.foldVerdict === 'mid_body' ? 'bg-amber-500' : 'bg-[#FF002D]'}`}
+                                style={{ width: `${Math.min(100, Math.max(5, creativeFindings.ctaButton?.placementYPercent || 35))}%` }}
+                              />
+                              <div className="absolute top-0 bottom-0 left-[40%] w-0.5 bg-white/40" title="40% Fold line" />
+                            </div>
+                            <div className="flex justify-between text-[8px] text-[#80949B]">
+                              <span>Top 0%</span>
+                              <span className="text-slate-400">Fold 40%</span>
+                              <span>Bottom</span>
+                            </div>
+                          </div>
+                          <p className={`text-[10px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                            {creativeFindings.ctaButton?.placementGuidance || 'Button fold placement based on vertical canvas coordinates.'}
                           </p>
-                          <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${
-                            creativeFindings.ctaButton?.touchTargetMeetsStandard
-                              ? 'bg-emerald-500/20 text-emerald-400 dark:text-emerald-300'
-                              : 'bg-amber-500/20 text-amber-500 dark:text-amber-300'
-                          }`}>
-                            {creativeFindings.ctaButton?.touchTargetMeetsStandard ? 'Pass (≥44px Standard)' : 'Sub-44px (Small target)'}
-                          </span>
                         </div>
 
-                        {/* Prominence */}
-                        <div className="space-y-1">
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Visual Prominence</span>
-                          <p className="font-bold">
+                        {/* 2. WCAG Contrast Ratio */}
+                        <div className={`space-y-1.5 rounded-xl border-0 p-3 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Contrast Ratio</span>
+                            {creativeFindings.ctaButton?.wcagEvaluation && (
+                              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${creativeFindings.ctaButton.wcagEvaluation.badgeBg} ${creativeFindings.ctaButton.wcagEvaluation.badgeText}`}>
+                                {creativeFindings.ctaButton.wcagEvaluation.label}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-baseline space-x-1.5">
+                            <span className="text-xl font-black">
+                              {creativeFindings.ctaButton?.contrastRatio ? `${creativeFindings.ctaButton.contrastRatio}:1` : '—'}
+                            </span>
+                            <span className="text-[9px] text-[#80949B]">(AA min 4.5:1)</span>
+                          </div>
+                          {creativeFindings.ctaButton?.fillColor && creativeFindings.ctaButton?.textColor && (
+                            <div className="flex items-center space-x-1 text-[10px] font-mono">
+                              <span className="h-2.5 w-2.5 rounded-full border border-white/20" style={{ backgroundColor: creativeFindings.ctaButton.textColor }} />
+                              <span>{creativeFindings.ctaButton.textColor}</span>
+                              <span className="text-slate-500">on</span>
+                              <span className="h-2.5 w-2.5 rounded-full border border-white/20" style={{ backgroundColor: creativeFindings.ctaButton.fillColor }} />
+                              <span>{creativeFindings.ctaButton.fillColor}</span>
+                            </div>
+                          )}
+                          <p className={`text-[10px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                            {creativeFindings.ctaButton?.wcagEvaluation?.description || 'Calculated from sampled button fill and foreground typography.'}
+                          </p>
+                        </div>
+
+                        {/* 3. Touch Tap Target */}
+                        <div className={`space-y-1.5 rounded-xl border-0 p-3 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Touch Tap Target</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                              creativeFindings.ctaButton?.touchTargetMeetsStandard
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-amber-500/20 text-amber-400'
+                            }`}>
+                              {creativeFindings.ctaButton?.touchTargetMeetsStandard ? 'Pass Standard' : 'Sub-44px'}
+                            </span>
+                          </div>
+                          <p className="text-xs font-bold">
+                            {creativeFindings.ctaButton?.buttonHeight ? `${creativeFindings.ctaButton.buttonHeight}px height` : 'Not assessable'}
+                          </p>
+                          <p className={`text-[10px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                            {creativeFindings.ctaButton?.touchTargetMeetsStandard
+                              ? 'Meets Apple HIG & Material 44×44px minimum tap target to prevent missed clicks.'
+                              : 'Button height is smaller than 44px; increase padding for mobile accessibility.'}
+                          </p>
+                        </div>
+
+                        {/* 4. Visual Prominence */}
+                        <div className={`space-y-1.5 rounded-xl border-0 p-3 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Prominence</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                              creativeFindings.ctaButton?.standoutColor
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-slate-700 text-slate-300'
+                            }`}>
+                              {creativeFindings.ctaButton?.standoutColor ? 'Standout Fill' : 'Low Contrast'}
+                            </span>
+                          </div>
+                          <p className="text-xs font-bold">
                             {creativeFindings.ctaButton?.buttonLike ? 'Button-shaped container' : 'Text-link style'}
                           </p>
-                          <p className="text-[10px] text-slate-600 dark:text-slate-400">
+                          <p className={`text-[10px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                             {creativeFindings.ctaButton?.standoutColor
-                              ? `Standout fill (${creativeFindings.ctaButton.fillColor}) distinguishes action from background.`
+                              ? `High chroma fill (${creativeFindings.ctaButton.fillColor}) distinguishes action from background.`
                               : 'Button lacks high-chroma standout fill against canvas.'}
                           </p>
                         </div>

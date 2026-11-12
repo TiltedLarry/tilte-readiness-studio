@@ -37,8 +37,6 @@ import {
   Info,
   Sun,
   Moon,
-  ChevronDown,
-  ChevronUp,
   ShieldCheck,
   Smartphone,
   X,
@@ -605,40 +603,148 @@ function analyzeEmailCta(emailCopy = '', visualScan = null) {
   };
 }
 
+function generateDeterministicEmailSummaries(subjectLine = '', preHeader = '', emailCopy = '') {
+  // Strip HTML and normalize whitespace
+  const cleanText = (emailCopy || '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const subject = (subjectLine || '').trim();
+  const preheader = (preHeader || '').trim();
+
+  // Extract clean sentences
+  const sentences = cleanText
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 12 && !/unsubscribe|privacy policy|view in browser|terms of service|preferences/i.test(s));
+
+  // Extract key entities: Deadlines, Dates, Amounts
+  const dateMatch = cleanText.match(/\b(?:by|until|before|on|expires|deadline:?)\s+([A-Za-z]+ \d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?|\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+day(?:\s+\w+\s+\d{1,2})?)\b/i)
+    || cleanText.match(/\b(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+ \d{1,2},?\s*\d{4}|by \w+ \d{1,2}(?:st|nd|rd|th)?)\b/i);
+  const extractedDate = dateMatch ? dateMatch[0].replace(/^(by|until|before|on|expires|deadline:?)\s+/i, '') : 'Not detected';
+
+  const amountMatch = cleanText.match(/([R$€£¥]\s?[\d,]+(?:\.\d{2})?|\b\d+%\s*off\b|\bfree\s+(?:shipping|trial|gift)\b)/i);
+  const extractedAmount = amountMatch ? amountMatch[0] : 'Not detected';
+
+  const ctaResult = analyzeEmailCta(emailCopy);
+  const primaryCta = ctaResult.isDetected && ctaResult.primaryCtaText !== 'No CTA detected'
+    ? ctaResult.primaryCtaText
+    : null;
+
+  const leadTopic = subject || (sentences[0] ? sentences[0].replace(/[.!?]+$/, '') : 'Email update');
+
+  // 1. Apple Intelligence: Concise 1-sentence lock-screen / notification summary
+  let apple;
+  if (primaryCta && extractedDate !== 'Not detected') {
+    apple = `${leadTopic} — ${primaryCta.toLowerCase()} by ${extractedDate}.`;
+  } else if (primaryCta) {
+    apple = `${leadTopic} with action requested to ${primaryCta.toLowerCase()}.`;
+  } else if (extractedDate !== 'Not detected') {
+    apple = `${leadTopic}, with key deadlines effective through ${extractedDate}.`;
+  } else if (sentences[0]) {
+    apple = `${leadTopic}: ${sentences[0].slice(0, 100).replace(/[.!?]+$/, '')}.`;
+  } else {
+    apple = leadTopic.endsWith('.') ? leadTopic : `${leadTopic}.`;
+  }
+  const appleWords = apple.split(/\s+/);
+  if (appleWords.length > 24) {
+    apple = `${appleWords.slice(0, 23).join(' ')}...`;
+  }
+
+  // 2. Gmail Gemini: 3 informational bullet points summarizing the actual email
+  const gemini = [];
+  gemini.push(
+    subject
+      ? `${subject.replace(/[.!?]+$/, '')}${preheader ? ` — ${preheader.replace(/[.!?]+$/, '')}` : ''}`
+      : sentences[0] || 'Core announcement and campaign updates.'
+  );
+
+  if (extractedAmount !== 'Not detected' && extractedDate !== 'Not detected') {
+    gemini.push(`Features ${extractedAmount} with response requested by ${extractedDate}.`);
+  } else if (extractedAmount !== 'Not detected') {
+    gemini.push(`Includes offer details: ${extractedAmount}.`);
+  } else if (extractedDate !== 'Not detected') {
+    gemini.push(`Notices effective through ${extractedDate}.`);
+  } else if (preheader && preheader !== subject) {
+    gemini.push(preheader.replace(/[.!?]+$/, '') + '.');
+  } else if (sentences[1]) {
+    gemini.push(sentences[1].slice(0, 95).replace(/[.!?]+$/, '') + '.');
+  } else {
+    gemini.push('Full details, terms, and context provided in message body.');
+  }
+
+  if (primaryCta) {
+    gemini.push(`Primary action: ${primaryCta.replace(/[.!?]+$/, '')} using the link provided.`);
+  } else if (sentences[2]) {
+    gemini.push(sentences[2].slice(0, 95).replace(/[.!?]+$/, '') + '.');
+  } else {
+    gemini.push('Recipients are directed to review instructions and follow up online.');
+  }
+
+  // 3. Outlook Copilot: 2-3 sentence executive paragraph
+  const copilotIntro = `This message provides an update regarding ${subject ? `"${subject}"` : 'the submitted communication'}${preheader ? `, noting that ${preheader.toLowerCase()}` : ''}.`;
+  const copilotDetail = extractedDate !== 'Not detected' || extractedAmount !== 'Not detected'
+    ? ` It highlights ${extractedAmount !== 'Not detected' ? `an offer of ${extractedAmount}` : 'relevant schedule details'}${extractedDate !== 'Not detected' ? ` with a deadline of ${extractedDate}` : ''}.`
+    : sentences[1] ? ` ${sentences[1].slice(0, 110).replace(/[.!?]+$/, '')}.` : '';
+  const copilotAction = primaryCta
+    ? ` The sender requests that recipients ${primaryCta.toLowerCase()} via the included link.`
+    : ' Review the message body for full details and next steps.';
+  const copilot = `${copilotIntro}${copilotDetail}${copilotAction}`;
+
+  return {
+    apple,
+    gemini: gemini.slice(0, 3),
+    copilot,
+    extractedDate,
+    extractedAmount,
+    extractedCta: primaryCta || 'Not detected',
+  };
+}
+
 async function generateInboxSimulations(subjectLine, preHeader, emailCopy) {
+  if (!GEMINI_API_KEY) {
+    return generateDeterministicEmailSummaries(subjectLine, preHeader, emailCopy);
+  }
+
   const emailContext = `Subject: ${subjectLine || '(no subject)'}
 Pre-header: ${preHeader || '(none)'}
 Body:
 ${emailCopy}`;
 
-  const [appleRaw, gmailRaw, outlookRaw] = await Promise.all([
-    callGemini(APPLE_SYSTEM_PROMPT, emailContext),
-    callGemini(GMAIL_SYSTEM_PROMPT, emailContext),
-    callGemini(OUTLOOK_SYSTEM_PROMPT, emailContext),
-  ]);
+  try {
+    const [appleRaw, gmailRaw, outlookRaw] = await Promise.all([
+      callGemini(APPLE_SYSTEM_PROMPT, emailContext),
+      callGemini(GMAIL_SYSTEM_PROMPT, emailContext),
+      callGemini(OUTLOOK_SYSTEM_PROMPT, emailContext),
+    ]);
 
-  // Parse Gmail bullets (newline-separated)
-  const geminiBullets = gmailRaw
-    .split('\n')
-    .map((l) => l.replace(/^[-•*]\s*/, '').trim())
-    .filter(Boolean)
-    .slice(0, 3);
+    const geminiBullets = gmailRaw
+      .split('\n')
+      .map((l) => l.replace(/^[-•*]\s*/, '').trim())
+      .filter(Boolean)
+      .slice(0, 3);
 
-  // Accurate regex and CTA extraction from raw copy
-  const dateMatch = emailCopy.match(
-    /\b(\d{1,2}[\s/-]\w+[\s/-]\d{2,4}|\w+ \d{1,2},?\s*\d{4}|by \w+ \d{1,2}(?:st|nd|rd|th)?)\b/i,
-  );
-  const amountMatch = emailCopy.match(/[R$€£¥]\s?[\d,]+(?:\.\d{2})?/);
-  const ctaResult = analyzeEmailCta(emailCopy);
+    const deterministic = generateDeterministicEmailSummaries(subjectLine, preHeader, emailCopy);
 
-  return {
-    apple: appleRaw,
-    gemini: geminiBullets.length > 0 ? geminiBullets : ['Summary could not be generated.'],
-    copilot: outlookRaw,
-    extractedDate: dateMatch ? dateMatch[0] : 'Not detected',
-    extractedAmount: amountMatch ? amountMatch[0] : 'Not detected',
-    extractedCta: ctaResult.isDetected ? ctaResult.primaryCtaText : 'Not detected',
-  };
+    return {
+      apple: appleRaw || deterministic.apple,
+      gemini: geminiBullets.length >= 2 ? geminiBullets : deterministic.gemini,
+      copilot: outlookRaw || deterministic.copilot,
+      extractedDate: deterministic.extractedDate,
+      extractedAmount: deterministic.extractedAmount,
+      extractedCta: deterministic.extractedCta,
+    };
+  } catch (err) {
+    console.warn('Gemini API call failed, falling back to deterministic email summary:', err);
+    return generateDeterministicEmailSummaries(subjectLine, preHeader, emailCopy);
+  }
 }
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -658,8 +764,8 @@ export default function App() {
   const [selectedSource, setSelectedSource] = useState(DEFAULT_SOURCES[0]);
   const [isAddRuleModalOpen, setIsAddRuleModalOpen] = useState(false);
   const [newRule, setNewRule] = useState({ pillarIndex: 1, title: '', desc: '', weight: 7 });
+  const [isSavingMethodology, setIsSavingMethodology] = useState(false);
   const [methodologyStatusMsg, setMethodologyStatusMsg] = useState('');
-  const [expandedPillars, setExpandedPillars] = useState({ 1: false, 2: false, 3: false });
   const [manualChecks, setManualChecks] = useState(() => Object.fromEntries(MANUAL_CHECKPOINTS.map(({ id }) => [id, false])));
   const [clientName, setClientName] = useState('');
   const [campaignName, setCampaignName] = useState('');
@@ -1297,13 +1403,6 @@ export default function App() {
     setDarkMode((current) => !current);
   };
 
-  const togglePillar = (pillarIndex) => {
-    setExpandedPillars((current) => ({
-      ...current,
-      [pillarIndex]: !current[pillarIndex],
-    }));
-  };
-
   const handleDesignFile = (event) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -1436,24 +1535,9 @@ export default function App() {
       const simulations = await generateInboxSimulations(subjectLine, preHeader, emailCopy);
       setAuditResults((prev) => ({ ...prev, simulations }));
     } catch (err) {
-      console.error('Simulation error:', err);
-      setSimulationsError(
-        GEMINI_API_KEY
-          ? 'AI simulation failed. Check your API key or network connection.'
-          : 'No Gemini API key set. Add VITE_GEMINI_API_KEY to your .env.local file.',
-      );
-      // Fallback placeholder simulations
-      setAuditResults((prev) => ({
-        ...prev,
-        simulations: {
-          apple: 'Email content reviewed for message clarity and primary action.',
-          gemini: ['Key message identified', 'Primary call to action assessed', 'Content clarity reviewed'],
-          copilot: 'Primary action and supporting details assessed from the submitted copy.',
-          extractedDate: 'Not detected',
-          extractedAmount: 'Not detected',
-          extractedCta: 'Not detected',
-        },
-      }));
+      console.warn('Simulation error, using deterministic extractor:', err);
+      const fallbackSimulations = generateDeterministicEmailSummaries(subjectLine, preHeader, emailCopy);
+      setAuditResults((prev) => ({ ...prev, simulations: fallbackSimulations }));
     } finally {
       setSimulationsLoading(false);
     }
@@ -1772,10 +1856,10 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div className="flex items-center justify-between md:col-span-3">
+                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                      <div className="flex items-center justify-between lg:col-span-3">
                         <h4 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Pillar Breakdown</h4>
-                        <span className="text-[10px] text-[#80949B]">Select a pillar to view its criteria</span>
+                        <span className="text-[10px] text-[#80949B]">All 15 criteria evaluated across 3 strategic pillars</span>
                       </div>
 
                       {[
@@ -1786,12 +1870,11 @@ export default function App() {
                         const pillarRules = auditResults.evaluatedRules.filter((r) => r.pillarIndex === pillar.index);
                         const pillarEarned = pillarRules.reduce((acc, r) => acc + r.earned, 0);
                         const pillarMax = pillarRules.reduce((acc, r) => acc + r.weight, 0);
-                        const isExpanded = !!expandedPillars[pillar.index];
                         const IconComponent = pillar.icon;
 
                         return (
-                          <div key={pillar.index} className={`rounded-xl border-0 transition-all ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                            <button type="button" onClick={() => togglePillar(pillar.index)} className="flex w-full items-center justify-between p-3.5 text-left focus:outline-none">
+                          <div key={pillar.index} className={`rounded-xl border-0 p-4 transition-all space-y-3.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
+                            <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
                               <div className="flex items-center space-x-2.5">
                                 <div className={`rounded-lg p-1.5 ${darkMode ? 'bg-[#072E3D] text-[#BFC9CE]' : 'bg-white text-slate-700 shadow-xs'}`}>
                                   <IconComponent className="h-4 w-4" />
@@ -1799,44 +1882,41 @@ export default function App() {
                                 <div>
                                   <span className="block text-xs font-bold">{pillar.name}</span>
                                   <span className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                                    {pillarRules.length} criterion evaluated
+                                    {pillarRules.length} criteria evaluated
                                   </span>
                                 </div>
                               </div>
 
-                              <div className="flex items-center space-x-3">
-                                <span className="text-xs font-black text-[#405E69] dark:text-[#BFC9CE]">
+                              <div className="flex items-center space-x-2">
+                                <span className="rounded-md bg-[#405E69]/20 px-2 py-0.5 text-xs font-black text-[#405E69] dark:text-[#BFC9CE]">
                                   {pillarEarned} / {pillarMax} pts
                                 </span>
-                                {isExpanded ? <ChevronUp className="h-4 w-4 text-[#80949B]" /> : <ChevronDown className="h-4 w-4 text-[#80949B]" />}
                               </div>
-                            </button>
+                            </div>
 
-                            {isExpanded && (
-                              <div className="space-y-2 p-3 pt-0">
-                                {pillarRules.map((rule) => (
-                                  <div key={rule.id} className={`flex flex-col justify-between gap-2 rounded-lg border-0 p-3 text-xs sm:flex-row sm:items-center ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
-                                    <div className="flex items-start space-x-2">
-                                      <span className="mt-0.5 shrink-0">
-                                        {rule.status === 'pass' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
-                                        {rule.status === 'warning' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                                        {rule.status === 'alert' && <AlertOctagon className="h-3.5 w-3.5 text-[#FF002D]" />}
-                                      </span>
-                                      <div>
-                                        <p className="text-xs font-semibold leading-snug">{rule.code}. {rule.title}</p>
-                                        <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{rule.reason}</p>
-                                      </div>
-                                    </div>
-
-                                    <div className="shrink-0 text-right">
-                                      <span className={`font-mono text-xs font-bold ${rule.status === 'pass' ? 'text-emerald-500' : rule.status === 'warning' ? 'text-amber-500' : 'text-[#FF002D]'}`}>
-                                        {rule.earned}/{rule.weight}
-                                      </span>
+                            <div className="space-y-2">
+                              {pillarRules.map((rule) => (
+                                <div key={rule.id} className={`flex flex-col justify-between gap-2 rounded-lg border-0 p-3 text-xs sm:flex-row sm:items-center ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
+                                  <div className="flex items-start space-x-2">
+                                    <span className="mt-0.5 shrink-0">
+                                      {rule.status === 'pass' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                                      {rule.status === 'warning' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
+                                      {rule.status === 'alert' && <AlertOctagon className="h-3.5 w-3.5 text-[#FF002D]" />}
+                                    </span>
+                                    <div>
+                                      <p className="text-xs font-semibold leading-snug">{rule.code}. {rule.title}</p>
+                                      <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{rule.reason}</p>
                                     </div>
                                   </div>
-                                ))}
-                              </div>
-                            )}
+
+                                  <div className="shrink-0 text-right">
+                                    <span className={`font-mono text-xs font-bold ${rule.status === 'pass' ? 'text-emerald-500' : rule.status === 'warning' ? 'text-amber-500' : 'text-[#FF002D]'}`}>
+                                      {rule.earned}/{rule.weight}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         );
                       })}
@@ -2167,10 +2247,10 @@ export default function App() {
               </div>
             </div>
 
-            {methodologyStatusMsg && (
+            {(isSavingMethodology || methodologyStatusMsg) && (
               <div className="flex items-center space-x-2 rounded-xl border-0 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-400">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                <span>{methodologyStatusMsg}</span>
+                <span>{methodologyStatusMsg || 'Saving methodology...'}</span>
               </div>
             )}
 

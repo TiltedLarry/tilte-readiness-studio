@@ -43,6 +43,7 @@ import {
   Lock,
   LogOut,
   RotateCcw,
+  Upload,
 } from 'lucide-react';
 
 import { auth, db, SUPER_ADMIN_EMAIL, APP_ID } from './firebase';
@@ -792,6 +793,8 @@ export default function App() {
   const [creativeFindings, setCreativeFindings] = useState(null);
   const [isDraggingDesign, setIsDraggingDesign] = useState(false);
   const designUrlRef = useRef(null);
+  const designFileInputRef = useRef(null);
+  const styleGuideInputRef = useRef(null);
 
   const isCurrentUserAdmin = userRole === 'admin' || (user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
 
@@ -1483,21 +1486,26 @@ export default function App() {
       designUrlRef.current = url;
       setDesignPreviewUrl(url);
     } catch (err) {
-      console.error('Failed to create object URL, falling back to FileReader:', err);
+      console.warn('Object URL creation failed, using FileReader fallback:', err);
+    }
+
+    // Also read data URL in background as foolproof fallback for Safari / restricted environments
+    if (!file.type?.includes('pdf') && !file.name?.toLowerCase().endsWith('.pdf')) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setDesignPreviewUrl(e.target.result);
+        if (e.target?.result) {
+          setDesignPreviewUrl(e.target.result);
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleDesignFile = (event) => {
-    const file = event.target.files?.[0];
+    const file = event.target?.files?.[0];
     if (file) {
       processDesignFile(file);
     }
-    event.target.value = '';
   };
 
   const handleDesignDragOver = (e) => {
@@ -1516,14 +1524,22 @@ export default function App() {
     e.preventDefault();
     e.stopPropagation();
     setIsDraggingDesign(false);
-    const file = e.dataTransfer?.files?.[0];
+    let file = e.dataTransfer?.files?.[0];
+    if (!file && e.dataTransfer?.items?.length) {
+      for (const item of e.dataTransfer.items) {
+        if (item.kind === 'file') {
+          file = item.getAsFile();
+          if (file) break;
+        }
+      }
+    }
     if (file) {
       processDesignFile(file);
     }
   };
 
   const handleStyleGuideFile = (event) => {
-    const file = event.target.files?.[0];
+    const file = event.target?.files?.[0];
     if (file) {
       setStyleGuideFile(file);
       setStyleGuideFileName(file.name);
@@ -1531,7 +1547,6 @@ export default function App() {
       setCreativeFindings(null);
       setDesignScanStatus('Style guide ready to compare.');
     }
-    event.target.value = '';
   };
 
   const handleCalculateScore = async () => {
@@ -2457,51 +2472,81 @@ export default function App() {
                   onDragEnter={handleDesignDragOver}
                   onDragLeave={handleDesignDragLeave}
                   onDrop={handleDesignDrop}
-                  className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all ${
+                  onClick={() => designFileInputRef.current?.click()}
+                  className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all cursor-pointer ${
                     isDraggingDesign
                       ? 'border-[#FF002D] bg-[#FF002D]/10 ring-2 ring-[#FF002D]/30'
                       : darkMode
-                      ? 'border-[#405E69]/50 bg-[#002230] hover:border-[#80949B]'
-                      : 'border-slate-300 bg-[#F4F6F9] hover:border-slate-400'
+                      ? 'border-[#405E69]/50 bg-[#002230] hover:border-[#80949B] hover:bg-[#002b3d]'
+                      : 'border-slate-300 bg-[#F4F6F9] hover:border-slate-400 hover:bg-slate-100'
                   }`}
                 >
                   <input
+                    ref={designFileInputRef}
                     type="file"
                     id="designUploadInput"
-                    className="hidden"
+                    className="sr-only"
+                    onClick={(e) => { e.currentTarget.value = null; }}
                     onChange={handleDesignFile}
                     accept="image/*,.png,.jpg,.jpeg,.webp,.svg,.pdf,application/pdf"
                   />
-                  <label htmlFor="designUploadInput" className="block cursor-pointer space-y-2">
-                    <Eye className="mx-auto h-6 w-6 text-[#80949B]" />
-                    <p className="text-xs font-semibold">{designFileName || 'Upload Final Email Design (.png, .jpg, .webp, .svg, .pdf)'}</p>
-                    <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>
-                      {isDraggingDesign ? 'Drop file here to upload' : 'Click to browse or drag & drop. The design is scanned in this browser; the file is not uploaded to a server.'}
-                    </p>
-                  </label>
+                  <div className="space-y-3 pointer-events-none">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#405E69]/20 text-[#405E69] dark:text-[#BFC9CE]">
+                      <Upload className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                        {designFileName ? `Selected: ${designFileName}` : 'Choose or drop your final email design'}
+                      </p>
+                      <p className={`mt-1 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                        Supports JPG, PNG, WEBP, SVG, or PDF
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center space-x-1.5 rounded-lg bg-[#405E69] px-3 py-1.5 text-[11px] font-bold text-white shadow-xs">
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>{designFileName ? 'Replace File' : 'Browse Files'}</span>
+                    </span>
+                  </div>
                 </div>
                 {designScanStatus && <p className={`text-[11px] ${designScanStatus.startsWith('Scan failed') || designScanStatus.startsWith('Upload') ? 'text-rose-400' : darkMode ? 'text-[#80949B]' : 'text-slate-500'}`} role="status">{designScanStatus}</p>}
 
                 {designPreviewUrl && (
                   <div className={`overflow-hidden rounded-xl border-0 shadow-xs ${darkMode ? 'bg-[#001D29]' : 'bg-[#E9EDF2]'}`}>
                     <div className={`flex items-center justify-between border-b border-black/5 dark:border-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      <span>Final Email Design Preview</span>
+                      <span className="flex items-center space-x-1.5 truncate">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <span className="truncate">{designFileName}</span>
+                        {designFile?.size && (
+                          <span className="font-mono text-[9px] text-[#80949B]">
+                            ({(designFile.size / 1024).toFixed(1)} KB)
+                          </span>
+                        )}
+                      </span>
                       <button
                         type="button"
                         onClick={handleClearDesign}
-                        className="text-[10px] lowercase text-[#FF002D] hover:underline cursor-pointer"
+                        className="text-[10px] font-bold text-[#FF002D] hover:underline cursor-pointer shrink-0 ml-2"
                       >
-                        clear
+                        Remove
                       </button>
                     </div>
                     {designFile?.type === 'application/pdf' || designFile?.name?.toLowerCase().endsWith('.pdf') ? (
                       <iframe title="Final email design preview" src={designPreviewUrl} className="h-96 w-full bg-white" />
                     ) : (
-                      <div className="max-h-[32rem] overflow-auto bg-white p-3 text-center">
+                      <div className="max-h-[34rem] overflow-auto bg-white p-3 text-center">
                         <img
                           src={designPreviewUrl}
                           alt={`Preview of ${designFileName}`}
-                          className="mx-auto block max-h-[30rem] w-auto max-w-full object-contain"
+                          className="mx-auto block max-h-[32rem] w-auto max-w-full object-contain rounded-md"
+                          onError={() => {
+                            if (designFile) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                if (ev.target?.result) setDesignPreviewUrl(ev.target.result);
+                              };
+                              reader.readAsDataURL(designFile);
+                            }
+                          }}
                         />
                       </div>
                     )}
@@ -2514,10 +2559,18 @@ export default function App() {
                 </div>
 
                 <div className={`rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                  <label htmlFor="styleGuideUploadInput" className="mb-2 block text-xs font-medium">Style Guide Reference (optional)</label>
-                  <input id="styleGuideUploadInput" type="file" onChange={handleStyleGuideFile} accept="image/*,.png,.jpg,.jpeg,.webp,.svg,.pdf,application/pdf" className={`block w-full text-[11px] file:mr-3 file:rounded-md file:border-0 file:bg-[#405E69] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white ${darkMode ? 'text-[#BFC9CE]' : 'text-slate-600'}`} />
+                  <label htmlFor="styleGuideUploadInput" className="mb-2 block text-xs font-medium">Style Guide Reference (optional PDF or image)</label>
+                  <input
+                    ref={styleGuideInputRef}
+                    id="styleGuideUploadInput"
+                    type="file"
+                    onClick={(e) => { e.currentTarget.value = null; }}
+                    onChange={handleStyleGuideFile}
+                    accept="image/*,.png,.jpg,.jpeg,.webp,.svg,.pdf,application/pdf"
+                    className={`block w-full text-[11px] file:mr-3 file:rounded-md file:border-0 file:bg-[#405E69] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white ${darkMode ? 'text-[#BFC9CE]' : 'text-slate-600'}`}
+                  />
                   <p className={`mt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                    {styleGuideFileName || 'Upload a PDF or image guide to compare its palette and visible standards with the final design.'}
+                    {styleGuideFileName ? `Selected: ${styleGuideFileName}` : 'Upload a PDF or image guide to compare its palette and visible standards with the final design.'}
                   </p>
                 </div>
 

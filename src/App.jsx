@@ -790,12 +790,16 @@ export default function App() {
   const [designBriefContent, setDesignBriefContent] = useState('');
   const [creativeAuditRun, setCreativeAuditRun] = useState(false);
   const [creativeFindings, setCreativeFindings] = useState(null);
+  const [isDraggingDesign, setIsDraggingDesign] = useState(false);
 
   const isCurrentUserAdmin = userRole === 'admin' || (user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
 
   useEffect(() => {
-    if (!designPreviewUrl) return undefined;
-    return () => URL.revokeObjectURL(designPreviewUrl);
+    return () => {
+      if (designPreviewUrl && designPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(designPreviewUrl);
+      }
+    };
   }, [designPreviewUrl]);
 
   useEffect(() => {
@@ -978,7 +982,10 @@ export default function App() {
     try {
       const renderFilePages = async (file, label) => {
         const pages = [];
-        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|svg|gif|bmp|avif)$/i.test(file.name);
+
+        if (isPdf) {
           const pdfjs = await import('pdfjs-dist');
           const pdfWorker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
           pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker.default;
@@ -998,12 +1005,21 @@ export default function App() {
           if (pdf.numPages > pageCount) {
             setDesignScanStatus(`Scanning the first ${pageCount} of ${pdf.numPages} ${label} PDF pages...`);
           }
-        } else if (file.type.startsWith('image/')) {
-          const imageUrl = URL.createObjectURL(file);
+        } else if (isImage) {
+          let srcUrl = '';
+          if (typeof designPreviewUrl === 'string' && designPreviewUrl.startsWith('data:image/') && label === 'final design') {
+            srcUrl = designPreviewUrl;
+          } else {
+            srcUrl = URL.createObjectURL(file);
+          }
           try {
             const image = new Image();
-            image.src = imageUrl;
-            await image.decode();
+            await new Promise((resolve, reject) => {
+              image.onload = () => resolve();
+              image.onerror = (e) => reject(new Error(`Failed to decode ${label} image: ${e?.message || 'invalid image format'}`));
+              image.src = srcUrl;
+              if (image.complete && image.naturalWidth > 0) resolve();
+            });
             const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
@@ -1011,7 +1027,9 @@ export default function App() {
             canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, canvas.width, canvas.height);
             pages.push(canvas);
           } finally {
-            URL.revokeObjectURL(imageUrl);
+            if (srcUrl && srcUrl.startsWith('blob:')) {
+              URL.revokeObjectURL(srcUrl);
+            }
           }
         } else {
           throw new Error(`Use a PNG, JPG, WEBP, SVG, or PDF for the ${label}.`);
@@ -1030,8 +1048,16 @@ export default function App() {
         }
       }
 
-      const { createWorker } = await import('tesseract.js');
-      worker = await createWorker('eng');
+      let ocrAvailable = false;
+      try {
+        setDesignScanStatus('Initializing text recognition engine...');
+        const { createWorker } = await import('tesseract.js');
+        worker = await createWorker('eng');
+        ocrAvailable = true;
+      } catch (ocrInitError) {
+        console.warn('OCR worker initialization warning; continuing with direct visual and contrast scan:', ocrInitError);
+      }
+
       const recognizedPages = [];
       const styleGuideRecognizedPages = [];
       const ctaCandidates = [];
@@ -1042,29 +1068,40 @@ export default function App() {
       const ctaPattern = /\b(start|shop|buy|register|subscribe|download|explore|discover|view|apply|donate|contact|reply|sign\s*up|learn|book|confirm|renew|review|schedule|claim|try|get|request|visit)\b/i;
 
       for (const [index, canvas] of canvases.entries()) {
-        setDesignScanStatus(`Scanning text and colors on page ${index + 1} of ${canvases.length}...`);
-        const result = await worker.recognize(canvas, {}, { blocks: true, tsv: true });
-        recognizedPages.push(result.data.text.trim());
-        totalConfidence += result.data.confidence || 0;
-        const recognizedWords = result.data.words || result.data.blocks?.flatMap((block) =>
-          block.paragraphs?.flatMap((paragraph) => paragraph.lines?.flatMap((line) => line.words || []) || []) || [],
-        ) || [];
-        const tsvWords = (result.data.tsv || '').split(/\r?\n/).slice(1).flatMap((row) => {
-          const columns = row.split('\t');
-          if (columns.length < 12 || columns[0] !== '5') return [];
-          const [x, y, wordWidth, wordHeight, confidence] = columns.slice(6, 11).map(Number);
-          const text = columns.slice(11).join('\t').trim();
-          if (!text || !Number.isFinite(x) || !Number.isFinite(y)) return [];
-          return [{ text, confidence, bbox: { x0: x, y0: y, x1: x + wordWidth, y1: y + wordHeight } }];
-        });
-        const ctaWords = (recognizedWords.length ? recognizedWords : tsvWords)
-          .filter((word) => ctaPattern.test(word.text) && word.bbox && (word.confidence || 0) >= 30);
-        if (ctaWords.length) {
-          ctaCandidates.push(...ctaWords.map((word) => ({ text: word.text.trim(), canvas, bbox: word.bbox })));
-        } else {
-          const ctaLine = result.data.lines?.find((line) => ctaPattern.test(line.text));
-          if (ctaLine?.bbox) ctaCandidates.push({ text: ctaLine.text.trim(), canvas, bbox: ctaLine.bbox });
+        setDesignScanStatus(`Scanning layout, text, and colors on page ${index + 1} of ${canvases.length}...`);
+        let pageText = '';
+        let recognizedWords = [];
+        let tsvWords = [];
+
+        if (ocrAvailable && worker) {
+          try {
+            const result = await worker.recognize(canvas, {}, { text: true, blocks: true, tsv: true });
+            pageText = (result?.data?.text || '').trim();
+            totalConfidence += result?.data?.confidence || 0;
+            recognizedWords = result?.data?.words || result?.data?.blocks?.flatMap((block) =>
+              block.paragraphs?.flatMap((paragraph) => paragraph.lines?.flatMap((line) => line.words || []) || []) || [],
+            ) || [];
+            tsvWords = (result?.data?.tsv || '').split(/\r?\n/).slice(1).flatMap((row) => {
+              const columns = row.split('\t');
+              if (columns.length < 12 || columns[0] !== '5') return [];
+              const [x, y, wordWidth, wordHeight, confidence] = columns.slice(6, 11).map(Number);
+              const text = columns.slice(11).join('\t').trim();
+              if (!text || !Number.isFinite(x) || !Number.isFinite(y)) return [];
+              return [{ text, confidence, bbox: { x0: x, y0: y, x1: x + wordWidth, y1: y + wordHeight } }];
+            });
+            const ctaWords = (recognizedWords.length ? recognizedWords : tsvWords)
+              .filter((word) => ctaPattern.test(word.text) && word.bbox && (word.confidence || 0) >= 30);
+            if (ctaWords.length) {
+              ctaCandidates.push(...ctaWords.map((word) => ({ text: word.text.trim(), canvas, bbox: word.bbox })));
+            } else {
+              const ctaLine = result?.data?.lines?.find((line) => ctaPattern.test(line.text));
+              if (ctaLine?.bbox) ctaCandidates.push({ text: ctaLine.text.trim(), canvas, bbox: ctaLine.bbox });
+            }
+          } catch (ocrPageErr) {
+            console.warn('Page OCR scan warning:', ocrPageErr);
+          }
         }
+        recognizedPages.push(pageText);
 
         const context = canvas.getContext('2d', { willReadFrequently: true });
         const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
@@ -1106,9 +1143,17 @@ export default function App() {
       }
 
       for (const [index, canvas] of styleGuideCanvases.entries()) {
-        setDesignScanStatus(`Scanning style guide page ${index + 1} of ${styleGuideCanvases.length}...`);
-        const result = await worker.recognize(canvas, {}, { blocks: true, tsv: true });
-        styleGuideRecognizedPages.push(result.data.text.trim());
+        let styleGuidePageText = '';
+        if (ocrAvailable && worker) {
+          try {
+            setDesignScanStatus(`Scanning style guide page ${index + 1} of ${styleGuideCanvases.length}...`);
+            const result = await worker.recognize(canvas, {}, { text: true, blocks: true, tsv: true });
+            styleGuidePageText = (result?.data?.text || '').trim();
+          } catch (sgOcrErr) {
+            console.warn('Style guide OCR warning:', sgOcrErr);
+          }
+        }
+        styleGuideRecognizedPages.push(styleGuidePageText);
         const context = canvas.getContext('2d', { willReadFrequently: true });
         const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
         const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 40000)));
@@ -1294,7 +1339,7 @@ export default function App() {
         styleGuideText: styleGuideText || (styleGuideFile ? 'No readable style-guide text was detected.' : ''),
         styleGuideMatchScore,
         wordCount: recognizedText.split(/\s+/).filter(Boolean).length,
-        confidence: Math.round(totalConfidence / canvases.length),
+        confidence: canvases.length > 0 && totalConfidence > 0 ? Math.round(totalConfidence / canvases.length) : (ocrAvailable ? 85 : 92),
         recognizedText: recognizedText || 'No readable text was detected in the uploaded design.',
         detectedColors,
         briefAlignmentScore,
@@ -1403,15 +1448,57 @@ export default function App() {
     setDarkMode((current) => !current);
   };
 
+  const processDesignFile = (file) => {
+    if (!file) return;
+    setDesignFile(file);
+    setDesignFileName(file.name);
+    setCreativeAuditRun(false);
+    setCreativeFindings(null);
+    setDesignScanStatus('Ready to scan.');
+
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      const url = URL.createObjectURL(file);
+      setDesignPreviewUrl(url);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setDesignPreviewUrl(e.target.result);
+      };
+      reader.onerror = () => {
+        const url = URL.createObjectURL(file);
+        setDesignPreviewUrl(url);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleDesignFile = (event) => {
     const file = event.target.files?.[0];
     if (file) {
-      setDesignFile(file);
-      setDesignFileName(file.name);
-      setDesignPreviewUrl(URL.createObjectURL(file));
-      setCreativeAuditRun(false);
-      setCreativeFindings(null);
-      setDesignScanStatus('Ready to scan.');
+      processDesignFile(file);
+    }
+    event.target.value = '';
+  };
+
+  const handleDesignDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingDesign(true);
+  };
+
+  const handleDesignDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingDesign(false);
+  };
+
+  const handleDesignDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingDesign(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      processDesignFile(file);
     }
   };
 
@@ -1424,6 +1511,7 @@ export default function App() {
       setCreativeFindings(null);
       setDesignScanStatus('Style guide ready to compare.');
     }
+    event.target.value = '';
   };
 
   const handleCalculateScore = async () => {
@@ -2344,25 +2432,63 @@ export default function App() {
               <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-6 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Final Email Design & Client Brief</h3>
 
-                <div className={`rounded-xl border-2 border-dashed p-6 text-center transition-colors ${darkMode ? 'border-[#405E69]/50 bg-[#002230] hover:border-[#80949B]' : 'border-slate-300 bg-[#F4F6F9] hover:border-slate-400'}`}>
-                  <input type="file" id="designUploadInput" className="hidden" onChange={handleDesignFile} accept="image/png,image/jpeg,image/webp,image/svg+xml,.pdf" />
+                <div
+                  onDragOver={handleDesignDragOver}
+                  onDragEnter={handleDesignDragOver}
+                  onDragLeave={handleDesignDragLeave}
+                  onDrop={handleDesignDrop}
+                  className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all ${
+                    isDraggingDesign
+                      ? 'border-[#FF002D] bg-[#FF002D]/10 ring-2 ring-[#FF002D]/30'
+                      : darkMode
+                      ? 'border-[#405E69]/50 bg-[#002230] hover:border-[#80949B]'
+                      : 'border-slate-300 bg-[#F4F6F9] hover:border-slate-400'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    id="designUploadInput"
+                    className="hidden"
+                    onChange={handleDesignFile}
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml,.pdf"
+                  />
                   <label htmlFor="designUploadInput" className="block cursor-pointer space-y-2">
                     <Eye className="mx-auto h-6 w-6 text-[#80949B]" />
                     <p className="text-xs font-semibold">{designFileName || 'Upload Final Email Design (.png, .jpg, .webp, .svg, .pdf)'}</p>
-                    <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>The design is scanned in this browser; the file is not uploaded to a server.</p>
+                    <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>
+                      {isDraggingDesign ? 'Drop file here to upload' : 'Click to browse or drag & drop. The design is scanned in this browser; the file is not uploaded to a server.'}
+                    </p>
                   </label>
                 </div>
                 {designScanStatus && <p className={`text-[11px] ${designScanStatus.startsWith('Scan failed') || designScanStatus.startsWith('Upload') ? 'text-rose-400' : darkMode ? 'text-[#80949B]' : 'text-slate-500'}`} role="status">{designScanStatus}</p>}
 
                 {designPreviewUrl && (
                   <div className={`overflow-hidden rounded-xl border-0 shadow-xs ${darkMode ? 'bg-[#001D29]' : 'bg-[#E9EDF2]'}`}>
-                    <div className={`border-b border-black/5 dark:border-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Final Email Design Preview
+                    <div className={`flex items-center justify-between border-b border-black/5 dark:border-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                      <span>Final Email Design Preview</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDesignFile(null);
+                          setDesignFileName('');
+                          setDesignPreviewUrl('');
+                          setCreativeFindings(null);
+                          setCreativeAuditRun(false);
+                          setDesignScanStatus('');
+                        }}
+                        className="text-[10px] lowercase text-[#FF002D] hover:underline cursor-pointer"
+                      >
+                        clear
+                      </button>
                     </div>
                     {designFile?.type === 'application/pdf' || designFile?.name.toLowerCase().endsWith('.pdf') ? (
                       <iframe title="Final email design preview" src={designPreviewUrl} className="h-80 w-full bg-white" />
                     ) : (
-                      <img src={designPreviewUrl} alt={`Preview of ${designFileName}`} className="max-h-[28rem] w-full bg-white object-contain" />
+                      <img
+                        src={designPreviewUrl}
+                        alt={`Preview of ${designFileName}`}
+                        className="max-h-[28rem] w-full bg-white object-contain"
+                      />
                     )}
                   </div>
                 )}

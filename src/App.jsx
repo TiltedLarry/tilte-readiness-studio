@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -791,16 +791,18 @@ export default function App() {
   const [creativeAuditRun, setCreativeAuditRun] = useState(false);
   const [creativeFindings, setCreativeFindings] = useState(null);
   const [isDraggingDesign, setIsDraggingDesign] = useState(false);
+  const designUrlRef = useRef(null);
 
   const isCurrentUserAdmin = userRole === 'admin' || (user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
 
   useEffect(() => {
     return () => {
-      if (designPreviewUrl && designPreviewUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(designPreviewUrl);
+      if (designUrlRef.current) {
+        URL.revokeObjectURL(designUrlRef.current);
+        designUrlRef.current = null;
       }
     };
-  }, [designPreviewUrl]);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -1007,7 +1009,7 @@ export default function App() {
           }
         } else if (isImage) {
           let srcUrl = '';
-          if (typeof designPreviewUrl === 'string' && designPreviewUrl.startsWith('data:image/') && label === 'final design') {
+          if (typeof designPreviewUrl === 'string' && (designPreviewUrl.startsWith('data:image/') || designPreviewUrl.startsWith('blob:')) && label === 'final design') {
             srcUrl = designPreviewUrl;
           } else {
             srcUrl = URL.createObjectURL(file);
@@ -1020,14 +1022,51 @@ export default function App() {
               image.src = srcUrl;
               if (image.complete && image.naturalWidth > 0) resolve();
             });
-            const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-            canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, canvas.width, canvas.height);
-            pages.push(canvas);
+
+            // For email designs (especially full-scroll Figma exports), readability depends on width, not height.
+            // Maintain email width between 800px and 1200px so typography and buttons remain full-sized.
+            const targetWidth = Math.min(Math.max(image.naturalWidth, 600), 1200);
+            const scale = targetWidth / Math.max(1, image.naturalWidth);
+            const scaledWidth = Math.max(1, Math.round(image.naturalWidth * scale));
+            const scaledHeight = Math.max(1, Math.min(16000, Math.round(image.naturalHeight * scale)));
+
+            // If the email is very tall (e.g. > 2400px), split into logical fold screens of max 2000px each
+            // for fast, highly accurate OCR and fold-by-fold analysis
+            const maxFoldHeight = 2000;
+            if (scaledHeight > maxFoldHeight && label === 'final design') {
+              const foldCount = Math.min(Math.ceil(scaledHeight / maxFoldHeight), 6);
+              for (let i = 0; i < foldCount; i++) {
+                const foldY = Math.round(i * (scaledHeight / foldCount));
+                const nextFoldY = Math.round((i + 1) * (scaledHeight / foldCount));
+                const currentFoldHeight = nextFoldY - foldY;
+
+                const foldCanvas = document.createElement('canvas');
+                foldCanvas.width = scaledWidth;
+                foldCanvas.height = currentFoldHeight;
+                const ctx = foldCanvas.getContext('2d', { willReadFrequently: true });
+
+                const sourceY = Math.round(foldY / scale);
+                const sourceH = Math.round(currentFoldHeight / scale);
+                ctx.drawImage(
+                  image,
+                  0, sourceY, image.naturalWidth, Math.min(image.naturalHeight - sourceY, sourceH),
+                  0, 0, scaledWidth, currentFoldHeight,
+                );
+                foldCanvas._verticalOffset = foldY;
+                foldCanvas._totalHeight = scaledHeight;
+                pages.push(foldCanvas);
+              }
+            } else {
+              const canvas = document.createElement('canvas');
+              canvas.width = scaledWidth;
+              canvas.height = scaledHeight;
+              canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, scaledWidth, scaledHeight);
+              canvas._verticalOffset = 0;
+              canvas._totalHeight = scaledHeight;
+              pages.push(canvas);
+            }
           } finally {
-            if (srcUrl && srcUrl.startsWith('blob:')) {
+            if (srcUrl && srcUrl.startsWith('blob:') && srcUrl !== designPreviewUrl) {
               URL.revokeObjectURL(srcUrl);
             }
           }
@@ -1247,7 +1286,9 @@ export default function App() {
         const standoutColor = Boolean(fill.rgb && outer.rgb && colorDistance(fill.rgb, outer.rgb) >= 55 && Math.max(...fill.rgb) - Math.min(...fill.rgb) >= 40);
         const buttonAspectRatio = (buttonBox.x1 - buttonBox.x0) / Math.max(1, buttonBox.y1 - buttonBox.y0);
 
-        const placementYPercent = Math.round((((buttonBox.y0 + buttonBox.y1) / 2) / Math.max(1, canvas.height)) * 100);
+        const globalTotalHeight = canvas._totalHeight || canvas.height;
+        const globalY = ((buttonBox.y0 + buttonBox.y1) / 2) + (canvas._verticalOffset || 0);
+        const placementYPercent = Math.round((globalY / Math.max(1, globalTotalHeight)) * 100);
         const placementXPercent = Math.round((((buttonBox.x0 + buttonBox.x1) / 2) / Math.max(1, canvas.width)) * 100);
         const buttonWidth = Math.round(buttonBox.x1 - buttonBox.x0);
         const buttonHeight = Math.round(buttonBox.y1 - buttonBox.y0);
@@ -1448,6 +1489,19 @@ export default function App() {
     setDarkMode((current) => !current);
   };
 
+  const handleClearDesign = () => {
+    if (designUrlRef.current) {
+      URL.revokeObjectURL(designUrlRef.current);
+      designUrlRef.current = null;
+    }
+    setDesignFile(null);
+    setDesignFileName('');
+    setDesignPreviewUrl('');
+    setCreativeFindings(null);
+    setCreativeAuditRun(false);
+    setDesignScanStatus('');
+  };
+
   const processDesignFile = (file) => {
     if (!file) return;
     setDesignFile(file);
@@ -1456,17 +1510,20 @@ export default function App() {
     setCreativeFindings(null);
     setDesignScanStatus('Ready to scan.');
 
-    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    if (designUrlRef.current) {
+      URL.revokeObjectURL(designUrlRef.current);
+      designUrlRef.current = null;
+    }
+
+    try {
       const url = URL.createObjectURL(file);
+      designUrlRef.current = url;
       setDesignPreviewUrl(url);
-    } else {
+    } catch (err) {
+      console.error('Failed to create object URL, falling back to FileReader:', err);
       const reader = new FileReader();
       reader.onload = (e) => {
         setDesignPreviewUrl(e.target.result);
-      };
-      reader.onerror = () => {
-        const url = URL.createObjectURL(file);
-        setDesignPreviewUrl(url);
       };
       reader.readAsDataURL(file);
     }
@@ -2468,27 +2525,24 @@ export default function App() {
                       <span>Final Email Design Preview</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          setDesignFile(null);
-                          setDesignFileName('');
-                          setDesignPreviewUrl('');
-                          setCreativeFindings(null);
-                          setCreativeAuditRun(false);
-                          setDesignScanStatus('');
-                        }}
+                        onClick={handleClearDesign}
                         className="text-[10px] lowercase text-[#FF002D] hover:underline cursor-pointer"
                       >
                         clear
                       </button>
                     </div>
                     {designFile?.type === 'application/pdf' || designFile?.name.toLowerCase().endsWith('.pdf') ? (
-                      <iframe title="Final email design preview" src={designPreviewUrl} className="h-80 w-full bg-white" />
+                      <iframe title="Final email design preview" src={designPreviewUrl} className="h-96 w-full bg-white" />
                     ) : (
-                      <img
-                        src={designPreviewUrl}
-                        alt={`Preview of ${designFileName}`}
-                        className="max-h-[28rem] w-full bg-white object-contain"
-                      />
+                      <div className="max-h-[38rem] w-full overflow-y-auto overflow-x-hidden rounded-b-xl bg-slate-900/5 dark:bg-black/25 p-4 text-center">
+                        <div className="mx-auto max-w-[650px] overflow-hidden rounded-lg bg-white shadow-md">
+                          <img
+                            src={designPreviewUrl}
+                            alt={`Preview of ${designFileName}`}
+                            className="block h-auto w-full object-top"
+                          />
+                        </div>
+                      </div>
                     )}
                   </div>
                 )}

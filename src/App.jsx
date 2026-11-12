@@ -1023,10 +1023,9 @@ export default function App() {
               if (image.complete && image.naturalWidth > 0) resolve();
             });
 
-            // For email designs (especially full-scroll Figma exports), readability depends on width, not height.
-            // Maintain email width between 800px and 1200px so typography and buttons remain full-sized.
-            const targetWidth = Math.min(Math.max(image.naturalWidth, 600), 1200);
-            const scale = targetWidth / Math.max(1, image.naturalWidth);
+            // Preserve native dimensions for any export size (mobile 375px, desktop 1440px, @2x, @3x, etc.)
+            // Only scale down if width exceeds extreme 2560px to stay safely within browser canvas hardware limits
+            const scale = image.naturalWidth > 2560 ? 2560 / image.naturalWidth : 1;
             const scaledWidth = Math.max(1, Math.round(image.naturalWidth * scale));
             const scaledHeight = Math.max(1, Math.min(16000, Math.round(image.naturalHeight * scale)));
 
@@ -2534,14 +2533,12 @@ export default function App() {
                     {designFile?.type === 'application/pdf' || designFile?.name.toLowerCase().endsWith('.pdf') ? (
                       <iframe title="Final email design preview" src={designPreviewUrl} className="h-96 w-full bg-white" />
                     ) : (
-                      <div className="max-h-[38rem] w-full overflow-y-auto overflow-x-hidden rounded-b-xl bg-slate-900/5 dark:bg-black/25 p-4 text-center">
-                        <div className="mx-auto max-w-[650px] overflow-hidden rounded-lg bg-white shadow-md">
-                          <img
-                            src={designPreviewUrl}
-                            alt={`Preview of ${designFileName}`}
-                            className="block h-auto w-full object-top"
-                          />
-                        </div>
+                      <div className="max-h-[42rem] w-full overflow-auto rounded-b-xl bg-slate-900/5 dark:bg-black/25 p-4 text-center">
+                        <img
+                          src={designPreviewUrl}
+                          alt={`Preview of ${designFileName}`}
+                          className="mx-auto block h-auto max-w-full rounded-lg shadow-md"
+                        />
                       </div>
                     )}
                   </div>

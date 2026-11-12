@@ -39,9 +39,11 @@ import {
   Lock,
   LogOut,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 
 import { auth, db, SUPER_ADMIN_EMAIL, APP_ID } from './firebase';
+import CreativeScanner from './CreativeScanner';
 
 const DEFAULT_RULES = [
   { id: 'r1', pillar: '01 / Getting In', pillarIndex: 1, code: '01', title: 'Prove & Show Who You Are', desc: 'SPF, DKIM, DMARC alignment, plus BIMI brand logo verification.', weight: 7 },
@@ -1172,7 +1174,15 @@ export default function App() {
                 </span>
               </button>
 
-              </nav>
+              <button
+                type="button"
+                onClick={() => setActiveTab('design')}
+                className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 transition-all ${activeTab === 'design' ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>Design Review</span>
+              </button>
+            </nav>
 
             <div className="flex items-center space-x-2 pl-1">
               {user && !user.isAnonymous ? (
@@ -1899,6 +1909,9 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === 'design' && (
+          <CreativeScanner darkMode={darkMode} />
+        )}
       </main>
     </div>
   );

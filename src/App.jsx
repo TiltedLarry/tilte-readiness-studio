@@ -985,7 +985,6 @@ export default function App() {
       const renderFilePages = async (file, label) => {
         const pages = [];
         const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-        const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp|svg|gif|bmp|avif)$/i.test(file.name);
 
         if (isPdf) {
           const pdfjs = await import('pdfjs-dist');
@@ -1007,7 +1006,8 @@ export default function App() {
           if (pdf.numPages > pageCount) {
             setDesignScanStatus(`Scanning the first ${pageCount} of ${pdf.numPages} ${label} PDF pages...`);
           }
-        } else if (isImage) {
+        } else {
+          // Process as image (PNG, JPG, WEBP, SVG, or any image format)
           let srcUrl = '';
           if (typeof designPreviewUrl === 'string' && (designPreviewUrl.startsWith('data:image/') || designPreviewUrl.startsWith('blob:')) && label === 'final design') {
             srcUrl = designPreviewUrl;
@@ -1018,59 +1018,23 @@ export default function App() {
             const image = new Image();
             await new Promise((resolve, reject) => {
               image.onload = () => resolve();
-              image.onerror = (e) => reject(new Error(`Failed to decode ${label} image: ${e?.message || 'invalid image format'}`));
+              image.onerror = (e) => reject(new Error(`Failed to decode ${label} image: ${e?.message || 'ensure the file is a valid image'}`));
               image.src = srcUrl;
               if (image.complete && image.naturalWidth > 0) resolve();
             });
 
-            // Preserve native dimensions for any export size (mobile 375px, desktop 1440px, @2x, @3x, etc.)
-            // Only scale down if width exceeds extreme 2560px to stay safely within browser canvas hardware limits
+            // Scale to stay within browser canvas hardware limit (max 2560px width)
             const scale = image.naturalWidth > 2560 ? 2560 / image.naturalWidth : 1;
-            const scaledWidth = Math.max(1, Math.round(image.naturalWidth * scale));
-            const scaledHeight = Math.max(1, Math.min(16000, Math.round(image.naturalHeight * scale)));
-
-            // If the email is very tall (e.g. > 2400px), split into logical fold screens of max 2000px each
-            // for fast, highly accurate OCR and fold-by-fold analysis
-            const maxFoldHeight = 2000;
-            if (scaledHeight > maxFoldHeight && label === 'final design') {
-              const foldCount = Math.min(Math.ceil(scaledHeight / maxFoldHeight), 6);
-              for (let i = 0; i < foldCount; i++) {
-                const foldY = Math.round(i * (scaledHeight / foldCount));
-                const nextFoldY = Math.round((i + 1) * (scaledHeight / foldCount));
-                const currentFoldHeight = nextFoldY - foldY;
-
-                const foldCanvas = document.createElement('canvas');
-                foldCanvas.width = scaledWidth;
-                foldCanvas.height = currentFoldHeight;
-                const ctx = foldCanvas.getContext('2d', { willReadFrequently: true });
-
-                const sourceY = Math.round(foldY / scale);
-                const sourceH = Math.round(currentFoldHeight / scale);
-                ctx.drawImage(
-                  image,
-                  0, sourceY, image.naturalWidth, Math.min(image.naturalHeight - sourceY, sourceH),
-                  0, 0, scaledWidth, currentFoldHeight,
-                );
-                foldCanvas._verticalOffset = foldY;
-                foldCanvas._totalHeight = scaledHeight;
-                pages.push(foldCanvas);
-              }
-            } else {
-              const canvas = document.createElement('canvas');
-              canvas.width = scaledWidth;
-              canvas.height = scaledHeight;
-              canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, scaledWidth, scaledHeight);
-              canvas._verticalOffset = 0;
-              canvas._totalHeight = scaledHeight;
-              pages.push(canvas);
-            }
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+            canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, canvas.width, canvas.height);
+            pages.push(canvas);
           } finally {
             if (srcUrl && srcUrl.startsWith('blob:') && srcUrl !== designPreviewUrl) {
               URL.revokeObjectURL(srcUrl);
             }
           }
-        } else {
-          throw new Error(`Use a PNG, JPG, WEBP, SVG, or PDF for the ${label}.`);
         }
         return pages;
       };
@@ -2506,7 +2470,7 @@ export default function App() {
                     id="designUploadInput"
                     className="hidden"
                     onChange={handleDesignFile}
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml,.pdf"
+                    accept="image/*,.png,.jpg,.jpeg,.webp,.svg,.pdf,application/pdf"
                   />
                   <label htmlFor="designUploadInput" className="block cursor-pointer space-y-2">
                     <Eye className="mx-auto h-6 w-6 text-[#80949B]" />
@@ -2530,14 +2494,14 @@ export default function App() {
                         clear
                       </button>
                     </div>
-                    {designFile?.type === 'application/pdf' || designFile?.name.toLowerCase().endsWith('.pdf') ? (
+                    {designFile?.type === 'application/pdf' || designFile?.name?.toLowerCase().endsWith('.pdf') ? (
                       <iframe title="Final email design preview" src={designPreviewUrl} className="h-96 w-full bg-white" />
                     ) : (
-                      <div className="max-h-[42rem] w-full overflow-auto rounded-b-xl bg-slate-900/5 dark:bg-black/25 p-4 text-center">
+                      <div className="max-h-[32rem] overflow-auto bg-white p-3 text-center">
                         <img
                           src={designPreviewUrl}
                           alt={`Preview of ${designFileName}`}
-                          className="mx-auto block h-auto max-w-full rounded-lg shadow-md"
+                          className="mx-auto block max-h-[30rem] w-auto max-w-full object-contain"
                         />
                       </div>
                     )}
@@ -2551,7 +2515,7 @@ export default function App() {
 
                 <div className={`rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
                   <label htmlFor="styleGuideUploadInput" className="mb-2 block text-xs font-medium">Style Guide Reference (optional)</label>
-                  <input id="styleGuideUploadInput" type="file" onChange={handleStyleGuideFile} accept="image/png,image/jpeg,image/webp,image/svg+xml,.pdf" className={`block w-full text-[11px] file:mr-3 file:rounded-md file:border-0 file:bg-[#405E69] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white ${darkMode ? 'text-[#BFC9CE]' : 'text-slate-600'}`} />
+                  <input id="styleGuideUploadInput" type="file" onChange={handleStyleGuideFile} accept="image/*,.png,.jpg,.jpeg,.webp,.svg,.pdf,application/pdf" className={`block w-full text-[11px] file:mr-3 file:rounded-md file:border-0 file:bg-[#405E69] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white ${darkMode ? 'text-[#BFC9CE]' : 'text-slate-600'}`} />
                   <p className={`mt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
                     {styleGuideFileName || 'Upload a PDF or image guide to compare its palette and visible standards with the final design.'}
                   </p>

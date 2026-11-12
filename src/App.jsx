@@ -2108,50 +2108,6 @@ export default function App() {
               </div>
 
               <div className="mt-8 space-y-3">
-                <h3 className="border-b border-black/5 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">
-                  Primary Call to Action (CTA) & Visual Contrast Audit (Pillars 10 & 08)
-                </h3>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
-                    <strong className="block text-xs font-bold text-slate-900">Identified Primary CTA</strong>
-                    <p className="text-sm font-black text-[#741532]">
-                      "{creativeFindings?.ctaText || (auditResults?.ctaAnalysis?.isDetected ? auditResults.ctaAnalysis.primaryCtaText : 'Pending design scan')}"
-                    </p>
-                    <p className="text-[11px] text-slate-600">
-                      {creativeFindings?.ctaButton ? 'Verified in final design scan' : 'Upload final design in Creative Review to audit'}
-                    </p>
-                    {auditResults?.ctaAnalysis?.competingCount > 0 && (
-                      <p className="text-[10px] text-slate-500">
-                        {auditResults.ctaAnalysis.competingCount} secondary actions detected.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
-                    <strong className="block text-xs font-bold text-slate-900">Placement & Fold Position</strong>
-                    <p className="text-xs font-bold text-slate-800">
-                      {creativeFindings?.ctaButton?.placementLabel || 'Pending design scan'}
-                    </p>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      {creativeFindings?.ctaButton?.placementGuidance || 'Button fold placement based on vertical canvas coordinates in Creative Review.'}
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5 rounded-xl border-0 bg-[#F4F6F9] p-4">
-                    <strong className="block text-xs font-bold text-slate-900">WCAG 2.1 Contrast Ratio</strong>
-                    <p className="text-xs font-bold text-slate-800">
-                      {creativeFindings?.ctaButton?.contrastRatio
-                        ? `${creativeFindings.ctaButton.contrastRatio}:1 (${creativeFindings.ctaButton.wcagEvaluation?.label || 'Verified'})`
-                        : 'Pending design scan in Creative Review'}
-                    </p>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      {creativeFindings?.ctaButton?.wcagEvaluation?.description || 'Requires uploading the final rendered design in Creative Review to verify pixel-level contrast.'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-8 space-y-3">
                 <h3 className="border-b border-black/5 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">Observed AI Inbox Extract Simulations</h3>
                 <p className="text-[11px] italic text-slate-500">Note: Inbox summaries are estimated based on observed LLM behavior (Apple Intelligence, Gemini, Outlook Copilot).</p>
 

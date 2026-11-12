@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -30,10 +30,6 @@ import {
   BookOpen,
   Plus,
   Trash2,
-  Palette,
-  Eye,
-  Target,
-  MousePointer,
   Info,
   Sun,
   Moon,
@@ -43,7 +39,6 @@ import {
   Lock,
   LogOut,
   RotateCcw,
-  Upload,
 } from 'lucide-react';
 
 import { auth, db, SUPER_ADMIN_EMAIL, APP_ID } from './firebase';
@@ -82,6 +77,7 @@ const MANUAL_CHECKPOINTS = [
   { id: 'imageFallback', ruleId: 'r7', label: 'The message remains understandable when images are blocked.' },
   { id: 'accessibility', ruleId: 'r8', label: 'Accessibility, contrast, alt text, and dark-mode behavior have been checked.' },
   { id: 'senderIdentity', ruleId: 'r9', label: 'The from name and sending domain are recognizable and aligned with the brand.' },
+  { id: 'clearAction', ruleId: 'r10', label: 'Primary call-to-action is clear, focused, and uncompeting.' },
   { id: 'personalizationData', ruleId: 'r11', label: 'Personalization data, consent, and fallback behavior have been validated.' },
   { id: 'sendCadence', ruleId: 'r12', label: 'Lifecycle timing and frequency limits are configured for this audience.' },
   { id: 'aiReadability', ruleId: 'r13', label: 'Dates, amounts, and next steps are clear and accurate in the final rendered email.' },
@@ -216,7 +212,7 @@ function evaluateWcagCompliance(ratio) {
       pass: false,
       badgeBg: 'bg-slate-700/60',
       badgeText: 'text-slate-300',
-      description: 'Visual contrast unverified — pending HTML button styles or design scan.',
+      description: 'Visual contrast unverified — pending HTML button styles.',
     };
   }
   if (ratio >= 7.0) {
@@ -260,7 +256,7 @@ function evaluateWcagCompliance(ratio) {
 }
 
 // ─── Robust Email CTA & Placement Analysis Engine ───────────────────────────
-function analyzeEmailCta(emailCopy = '', visualScan = null) {
+function analyzeEmailCta(emailCopy = '') {
   const copy = (emailCopy || '').trim();
   if (!copy) {
     return {
@@ -529,9 +525,7 @@ function analyzeEmailCta(emailCopy = '', visualScan = null) {
   }
 
   // Placement determination
-  const placementPercent = visualScan?.placementYPercent !== undefined
-    ? visualScan.placementYPercent
-    : primaryCandidate.positionPercent;
+  const placementPercent = primaryCandidate.positionPercent;
 
   let foldVerdict = 'above_fold';
   let placementBadge = `Above the Fold (Top ${placementPercent}%)`;
@@ -553,12 +547,7 @@ function analyzeEmailCta(emailCopy = '', visualScan = null) {
   let fillColor = null;
   let contrastSource = 'none';
 
-  if (visualScan?.contrastRatio) {
-    contrastRatio = visualScan.contrastRatio;
-    textColor = visualScan.textColor;
-    fillColor = visualScan.fillColor;
-    contrastSource = 'design_scan';
-  } else if (primaryCandidate.styleColors?.contrastRatio) {
+  if (primaryCandidate.styleColors?.contrastRatio) {
     contrastRatio = primaryCandidate.styleColors.contrastRatio;
     textColor = primaryCandidate.styleColors.textColor;
     fillColor = primaryCandidate.styleColors.fillColor;
@@ -779,33 +768,7 @@ export default function App() {
   const [auditResults, setAuditResults] = useState(null);
   const [simulationsLoading, setSimulationsLoading] = useState(false);
   const [simulationsError, setSimulationsError] = useState(null);
-  const [designFile, setDesignFile] = useState(null);
-  const [designFileName, setDesignFileName] = useState('');
-  const [designPreviewUrl, setDesignPreviewUrl] = useState('');
-  const [styleGuideFile, setStyleGuideFile] = useState(null);
-  const [styleGuideFileName, setStyleGuideFileName] = useState('');
-  const [designScanStatus, setDesignScanStatus] = useState('');
-  const [isScanningDesign, setIsScanningDesign] = useState(false);
-  const [creativeSubject, setCreativeSubject] = useState('');
-  const [creativePreheader, setCreativePreheader] = useState('');
-  const [designBriefContent, setDesignBriefContent] = useState('');
-  const [creativeAuditRun, setCreativeAuditRun] = useState(false);
-  const [creativeFindings, setCreativeFindings] = useState(null);
-  const [isDraggingDesign, setIsDraggingDesign] = useState(false);
-  const designUrlRef = useRef(null);
-  const designFileInputRef = useRef(null);
-  const styleGuideInputRef = useRef(null);
-
   const isCurrentUserAdmin = userRole === 'admin' || (user?.email?.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase());
-
-  useEffect(() => {
-    return () => {
-      if (designUrlRef.current) {
-        URL.revokeObjectURL(designUrlRef.current);
-        designUrlRef.current = null;
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -972,423 +935,6 @@ export default function App() {
     saveMethodologyToFirestore(updated, sources);
   };
 
-  const handleRunCreativeReview = async () => {
-    if (!designFile) {
-      setDesignScanStatus('Upload the final email design before running the scan.');
-      return;
-    }
-
-    setIsScanningDesign(true);
-    setDesignScanStatus('Preparing final design for scanning...');
-    setCreativeAuditRun(false);
-    setCreativeFindings(null);
-
-    let worker;
-    try {
-      const renderFilePages = async (file, label) => {
-        const pages = [];
-        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-
-        if (isPdf) {
-          const pdfjs = await import('pdfjs-dist');
-          const pdfWorker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-          pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker.default;
-          const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-          const pageCount = Math.min(pdf.numPages, 10);
-          for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-            setDesignScanStatus(`Rendering ${label} PDF page ${pageNumber} of ${pageCount}...`);
-            const page = await pdf.getPage(pageNumber);
-            const baseViewport = page.getViewport({ scale: 1 });
-            const viewport = page.getViewport({ scale: Math.min(1.5, 1600 / Math.max(baseViewport.width, baseViewport.height)) });
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.ceil(viewport.width);
-            canvas.height = Math.ceil(viewport.height);
-            await page.render({ canvas, canvasContext: canvas.getContext('2d', { willReadFrequently: true }), viewport }).promise;
-            pages.push(canvas);
-          }
-          if (pdf.numPages > pageCount) {
-            setDesignScanStatus(`Scanning the first ${pageCount} of ${pdf.numPages} ${label} PDF pages...`);
-          }
-        } else {
-          // Process as image (PNG, JPG, WEBP, SVG, or any image format)
-          let srcUrl = '';
-          if (typeof designPreviewUrl === 'string' && (designPreviewUrl.startsWith('data:image/') || designPreviewUrl.startsWith('blob:')) && label === 'final design') {
-            srcUrl = designPreviewUrl;
-          } else {
-            srcUrl = URL.createObjectURL(file);
-          }
-          try {
-            const image = new Image();
-            await new Promise((resolve, reject) => {
-              image.onload = () => resolve();
-              image.onerror = (e) => reject(new Error(`Failed to decode ${label} image: ${e?.message || 'ensure the file is a valid image'}`));
-              image.src = srcUrl;
-              if (image.complete && image.naturalWidth > 0) resolve();
-            });
-
-            // Scale to stay within browser canvas hardware limit (max 2560px width)
-            const scale = image.naturalWidth > 2560 ? 2560 / image.naturalWidth : 1;
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-            canvas.getContext('2d', { willReadFrequently: true }).drawImage(image, 0, 0, canvas.width, canvas.height);
-            pages.push(canvas);
-          } finally {
-            if (srcUrl && srcUrl.startsWith('blob:') && srcUrl !== designPreviewUrl) {
-              URL.revokeObjectURL(srcUrl);
-            }
-          }
-        }
-        return pages;
-      };
-
-      const canvases = await renderFilePages(designFile, 'final design');
-      let styleGuideCanvases = [];
-      let styleGuideError = '';
-      if (styleGuideFile) {
-        try {
-          styleGuideCanvases = await renderFilePages(styleGuideFile, 'style guide');
-        } catch (error) {
-          styleGuideError = error.message || 'The style guide could not be scanned.';
-        }
-      }
-
-      let ocrAvailable = false;
-      try {
-        setDesignScanStatus('Initializing text recognition engine...');
-        const { createWorker } = await import('tesseract.js');
-        worker = await createWorker('eng');
-        ocrAvailable = true;
-      } catch (ocrInitError) {
-        console.warn('OCR worker initialization warning; continuing with direct visual and contrast scan:', ocrInitError);
-      }
-
-      const recognizedPages = [];
-      const styleGuideRecognizedPages = [];
-      const ctaCandidates = [];
-      const visualCtaCandidates = [];
-      const colorCounts = new Map();
-      const styleGuideColorCounts = new Map();
-      let totalConfidence = 0;
-      const ctaPattern = /\b(start|shop|buy|register|subscribe|download|explore|discover|view|apply|donate|contact|reply|sign\s*up|learn|book|confirm|renew|review|schedule|claim|try|get|request|visit)\b/i;
-
-      for (const [index, canvas] of canvases.entries()) {
-        setDesignScanStatus(`Scanning layout, text, and colors on page ${index + 1} of ${canvases.length}...`);
-        let pageText = '';
-        let recognizedWords = [];
-        let tsvWords = [];
-
-        if (ocrAvailable && worker) {
-          try {
-            const result = await worker.recognize(canvas, {}, { text: true, blocks: true, tsv: true });
-            pageText = (result?.data?.text || '').trim();
-            totalConfidence += result?.data?.confidence || 0;
-            recognizedWords = result?.data?.words || result?.data?.blocks?.flatMap((block) =>
-              block.paragraphs?.flatMap((paragraph) => paragraph.lines?.flatMap((line) => line.words || []) || []) || [],
-            ) || [];
-            tsvWords = (result?.data?.tsv || '').split(/\r?\n/).slice(1).flatMap((row) => {
-              const columns = row.split('\t');
-              if (columns.length < 12 || columns[0] !== '5') return [];
-              const [x, y, wordWidth, wordHeight, confidence] = columns.slice(6, 11).map(Number);
-              const text = columns.slice(11).join('\t').trim();
-              if (!text || !Number.isFinite(x) || !Number.isFinite(y)) return [];
-              return [{ text, confidence, bbox: { x0: x, y0: y, x1: x + wordWidth, y1: y + wordHeight } }];
-            });
-            const ctaWords = (recognizedWords.length ? recognizedWords : tsvWords)
-              .filter((word) => ctaPattern.test(word.text) && word.bbox && (word.confidence || 0) >= 30);
-            if (ctaWords.length) {
-              ctaCandidates.push(...ctaWords.map((word) => ({ text: word.text.trim(), canvas, bbox: word.bbox })));
-            } else {
-              const ctaLine = result?.data?.lines?.find((line) => ctaPattern.test(line.text));
-              if (ctaLine?.bbox) ctaCandidates.push({ text: ctaLine.text.trim(), canvas, bbox: ctaLine.bbox });
-            }
-          } catch (ocrPageErr) {
-            console.warn('Page OCR scan warning:', ocrPageErr);
-          }
-        }
-        recognizedPages.push(pageText);
-
-        const context = canvas.getContext('2d', { willReadFrequently: true });
-        const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-        const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 40000)));
-        const pageColorBounds = new Map();
-        for (let y = 0; y < height; y += step) {
-          for (let x = 0; x < width; x += step) {
-            const pixelIndex = (y * width + x) * 4;
-            if (data[pixelIndex + 3] < 180) continue;
-            const color = [data[pixelIndex], data[pixelIndex + 1], data[pixelIndex + 2]]
-              .map((channel) => Math.min(255, Math.floor(channel / 16) * 16 + 8));
-            const hex = `#${color.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
-            colorCounts.set(hex, (colorCounts.get(hex) || 0) + 1);
-            const bounds = pageColorBounds.get(hex) || { count: 0, x0: x, y0: y, x1: x, y1: y };
-            bounds.count += 1;
-            bounds.x0 = Math.min(bounds.x0, x);
-            bounds.y0 = Math.min(bounds.y0, y);
-            bounds.x1 = Math.max(bounds.x1, x);
-            bounds.y1 = Math.max(bounds.y1, y);
-            pageColorBounds.set(hex, bounds);
-          }
-        }
-        for (const [hex, bounds] of pageColorBounds) {
-          const rgb = hex.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
-          const boxWidth = bounds.x1 - bounds.x0 + step;
-          const boxHeight = bounds.y1 - bounds.y0 + step;
-          const gridArea = (Math.floor((bounds.x1 - bounds.x0) / step) + 1) * (Math.floor((bounds.y1 - bounds.y0) / step) + 1);
-          const density = bounds.count / Math.max(1, gridArea);
-          const chroma = Math.max(...rgb) - Math.min(...rgb);
-          if (bounds.count >= 40 && density >= 0.62 && chroma >= 48 && boxWidth >= 48 && boxHeight >= 18 && boxWidth / boxHeight >= 1.25 && boxWidth / boxHeight <= 10) {
-            visualCtaCandidates.push({
-              text: '',
-              canvas,
-              bbox: { x0: bounds.x0, y0: bounds.y0, x1: bounds.x1 + step, y1: bounds.y1 + step },
-              solidFill: { rgb, coverage: density },
-            });
-          }
-        }
-      }
-
-      for (const [index, canvas] of styleGuideCanvases.entries()) {
-        let styleGuidePageText = '';
-        if (ocrAvailable && worker) {
-          try {
-            setDesignScanStatus(`Scanning style guide page ${index + 1} of ${styleGuideCanvases.length}...`);
-            const result = await worker.recognize(canvas, {}, { text: true, blocks: true, tsv: true });
-            styleGuidePageText = (result?.data?.text || '').trim();
-          } catch (sgOcrErr) {
-            console.warn('Style guide OCR warning:', sgOcrErr);
-          }
-        }
-        styleGuideRecognizedPages.push(styleGuidePageText);
-        const context = canvas.getContext('2d', { willReadFrequently: true });
-        const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-        const step = Math.max(1, Math.floor(Math.sqrt((width * height) / 40000)));
-        for (let y = 0; y < height; y += step) {
-          for (let x = 0; x < width; x += step) {
-            const pixelIndex = (y * width + x) * 4;
-            if (data[pixelIndex + 3] < 180) continue;
-            const rgb = [data[pixelIndex], data[pixelIndex + 1], data[pixelIndex + 2]];
-            const hex = `#${rgb.map((channel) => Math.min(255, Math.floor(channel / 16) * 16 + 8).toString(16).padStart(2, '0')).join('')}`;
-            styleGuideColorCounts.set(hex, (styleGuideColorCounts.get(hex) || 0) + 1);
-          }
-        }
-      }
-
-      const recognizedText = recognizedPages.filter(Boolean).join('\n\n');
-      const styleGuideText = styleGuideRecognizedPages.filter(Boolean).join('\n\n');
-      const lines = recognizedText.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-      const fallbackCta = lines.find((line) => ctaPattern.test(line)) || '';
-      const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-      const compareBriefCopy = (brief, finalCopy) => {
-        const briefWords = new Set(normalize(brief).split(/\s+/).filter(Boolean));
-        const finalWords = new Set(normalize(finalCopy).split(/\s+/).filter(Boolean));
-        if (!briefWords.size || !finalWords.size) return null;
-        const sharedWords = [...briefWords].filter((word) => finalWords.has(word)).length;
-        return Math.round((sharedWords / new Set([...briefWords, ...finalWords]).size) * 100);
-      };
-      const subjectMatch = compareBriefCopy(subjectLine, creativeSubject);
-      const preheaderMatch = compareBriefCopy(preHeader, creativePreheader);
-      const copyScores = [subjectMatch, preheaderMatch].filter((score) => score !== null);
-      const briefAlignmentScore = copyScores.length
-        ? Math.round(copyScores.reduce((total, score) => total + score, 0) / copyScores.length)
-        : null;
-
-      const analyzeCtaButton = ({ canvas, bbox, solidFill }) => {
-        const { data, width, height } = canvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, canvas.width, canvas.height);
-        const textBox = {
-          x0: Math.max(0, Math.floor(bbox.x0)),
-          y0: Math.max(0, Math.floor(bbox.y0)),
-          x1: Math.min(width, Math.ceil(bbox.x1)),
-          y1: Math.min(height, Math.ceil(bbox.y1)),
-        };
-        const textHeight = Math.max(1, textBox.y1 - textBox.y0);
-        const padX = Math.max(10, Math.round(textHeight * 0.8));
-        const padY = Math.max(8, Math.round(textHeight * 0.45));
-        const buttonBox = solidFill ? textBox : {
-          x0: Math.max(0, textBox.x0 - padX),
-          y0: Math.max(0, textBox.y0 - padY),
-          x1: Math.min(width, textBox.x1 + padX),
-          y1: Math.min(height, textBox.y1 + padY),
-        };
-        const outsideBox = {
-          x0: Math.max(0, buttonBox.x0 - padX),
-          y0: Math.max(0, buttonBox.y0 - padY),
-          x1: Math.min(width, buttonBox.x1 + padX),
-          y1: Math.min(height, buttonBox.y1 + padY),
-        };
-        const quantize = (pixelIndex) => [data[pixelIndex], data[pixelIndex + 1], data[pixelIndex + 2]]
-          .map((channel) => Math.min(255, Math.floor(channel / 16) * 16 + 8));
-        const colorKey = (rgb) => rgb.map((channel) => channel.toString(16).padStart(2, '0')).join('');
-        const collectColors = (bounds, accept, excludeColor = null) => {
-          const counts = new Map();
-          const stride = Math.max(1, Math.floor(Math.max(bounds.x1 - bounds.x0, bounds.y1 - bounds.y0) / 80));
-          for (let y = bounds.y0; y < bounds.y1; y += stride) {
-            for (let x = bounds.x0; x < bounds.x1; x += stride) {
-              if (!accept(x, y)) continue;
-              const pixelIndex = (y * width + x) * 4;
-              if (data[pixelIndex + 3] < 180) continue;
-              const rgb = quantize(pixelIndex);
-              if (excludeColor && Math.sqrt(rgb.reduce((total, channel, channelIndex) => total + (channel - excludeColor[channelIndex]) ** 2, 0)) < 60) continue;
-              const key = colorKey(rgb);
-              counts.set(key, (counts.get(key) || 0) + 1);
-            }
-          }
-          const [key, count] = [...counts.entries()].sort((left, right) => right[1] - left[1])[0] || [];
-          return { rgb: key ? key.match(/.{2}/g).map((channel) => parseInt(channel, 16)) : null, coverage: count && counts.size ? count / [...counts.values()].reduce((sum, value) => sum + value, 0) : 0 };
-        };
-        const inBox = (box, x, y) => x >= box.x0 && x < box.x1 && y >= box.y0 && y < box.y1;
-        const fill = solidFill || collectColors(buttonBox, (x, y) => !inBox(textBox, x, y));
-        const outer = collectColors(outsideBox, (x, y) => !inBox(buttonBox, x, y));
-        const text = collectColors(textBox, (x, y) => inBox(textBox, x, y), fill.rgb);
-        const colorDistance = (left, right) => left && right
-          ? Math.sqrt(left.reduce((total, channel, index) => total + (channel - right[index]) ** 2, 0))
-          : 0;
-        const luminance = (rgb) => {
-          const channels = rgb.map((channel) => channel / 255).map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
-          return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
-        };
-        const textContrast = fill.rgb && text.rgb
-          ? (Math.max(luminance(fill.rgb), luminance(text.rgb)) + 0.05) / (Math.min(luminance(fill.rgb), luminance(text.rgb)) + 0.05)
-          : null;
-        const standoutColor = Boolean(fill.rgb && outer.rgb && colorDistance(fill.rgb, outer.rgb) >= 55 && Math.max(...fill.rgb) - Math.min(...fill.rgb) >= 40);
-        const buttonAspectRatio = (buttonBox.x1 - buttonBox.x0) / Math.max(1, buttonBox.y1 - buttonBox.y0);
-
-        const globalTotalHeight = canvas._totalHeight || canvas.height;
-        const globalY = ((buttonBox.y0 + buttonBox.y1) / 2) + (canvas._verticalOffset || 0);
-        const placementYPercent = Math.round((globalY / Math.max(1, globalTotalHeight)) * 100);
-        const placementXPercent = Math.round((((buttonBox.x0 + buttonBox.x1) / 2) / Math.max(1, canvas.width)) * 100);
-        const buttonWidth = Math.round(buttonBox.x1 - buttonBox.x0);
-        const buttonHeight = Math.round(buttonBox.y1 - buttonBox.y0);
-
-        const foldVerdict = placementYPercent <= 45 ? 'above_fold' : placementYPercent <= 70 ? 'mid_body' : 'below_fold';
-        const placementLabel = placementYPercent <= 45
-          ? `Above the Fold (Top ${placementYPercent}% of canvas)`
-          : placementYPercent <= 70
-            ? `Mid-Email (${placementYPercent}% down canvas)`
-            : `Below the Fold (${placementYPercent}% down canvas - Buried)`;
-
-        const placementGuidance = placementYPercent <= 45
-          ? 'Optimal placement: Located in the upper portion of the email design. Recipient sees the primary action without scrolling.'
-          : placementYPercent <= 70
-            ? 'Acceptable placement: Positioned in the middle section. If the email contains multiple visual banners, consider placing an early anchor CTA above the fold.'
-            : 'High drop-off risk: Positioned near the bottom of the design. Mobile recipients frequently disengage before scrolling this deep.';
-
-        const touchTargetMeetsStandard = buttonHeight >= 44;
-        const touchTargetFeedback = touchTargetMeetsStandard
-          ? `Pass (${buttonHeight}px height, meets the 44px+ mobile tap target standard)`
-          : `Warning (${buttonHeight}px height — recommend min 44px for thumb tap target)`;
-
-        const contrastRatioNum = textContrast ? Math.round(textContrast * 100) / 100 : null;
-        const wcagEvaluation = evaluateWcagCompliance(contrastRatioNum);
-
-        return {
-          buttonLike: fill.coverage >= 0.55 && colorDistance(fill.rgb, outer.rgb) >= 55 && buttonAspectRatio >= 1.25,
-          standoutColor,
-          fillColor: fill.rgb ? `#${colorKey(fill.rgb)}` : null,
-          textColor: text.rgb ? `#${colorKey(text.rgb)}` : null,
-          contrastRatio: contrastRatioNum,
-          placementYPercent,
-          placementXPercent,
-          buttonWidth,
-          buttonHeight,
-          foldVerdict,
-          placementLabel,
-          placementGuidance,
-          touchTargetMeetsStandard,
-          touchTargetFeedback,
-          wcagEvaluation,
-        };
-      };
-      const analyzedCtas = [...ctaCandidates, ...visualCtaCandidates].map((candidate) => ({ ...candidate, analysis: analyzeCtaButton(candidate) }));
-      analyzedCtas.sort((left, right) => Number(right.analysis.buttonLike) - Number(left.analysis.buttonLike)
-        || Number(right.analysis.standoutColor) - Number(left.analysis.standoutColor)
-        || Number(Boolean(right.text)) - Number(Boolean(left.text))
-        || (right.analysis.contrastRatio || 0) - (left.analysis.contrastRatio || 0));
-      const selectedCta = analyzedCtas[0];
-      const callToAction = selectedCta?.text || (selectedCta?.analysis.buttonLike ? '' : fallbackCta);
-      const ctaButton = selectedCta?.analysis || null;
-      const detectedColors = [...colorCounts.entries()]
-        .sort((left, right) => right[1] - left[1])
-        .slice(0, 8)
-        .map(([hex]) => hex);
-      const typedGuideColors = designBriefContent.match(/#[0-9a-f]{6}\b/gi) || [];
-      const extractedGuideColors = styleGuideText.match(/#[0-9a-f]{6}\b/gi) || [];
-      const styleGuidePixelCount = [...styleGuideColorCounts.values()].reduce((sum, count) => sum + count, 0);
-      const sampledGuideColors = [...styleGuideColorCounts.entries()]
-        .map(([hex, count]) => ({ hex, count, channels: hex.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16)) }))
-        .filter(({ channels, count }) => Math.max(...channels) - Math.min(...channels) >= 42 && count / Math.max(1, styleGuidePixelCount) >= 0.01)
-        .sort((left, right) => right.count - left.count)
-        .slice(0, 8)
-        .map(({ hex }) => hex);
-      const colorDistance = (left, right) => {
-        const leftRgb = left.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
-        const rightRgb = right.match(/[0-9a-f]{2}/gi).map((channel) => parseInt(channel, 16));
-        return Math.sqrt(leftRgb.reduce((sum, channel, index) => sum + (channel - rightRgb[index]) ** 2, 0));
-      };
-      const expectedColors = [];
-      for (const candidate of [...typedGuideColors, ...extractedGuideColors, ...sampledGuideColors]) {
-        if (!expectedColors.some((color) => colorDistance(color, candidate) <= 48)) expectedColors.push(candidate);
-      }
-      const matchedColors = expectedColors.filter((expected) => {
-        return detectedColors.some((detected) => colorDistance(expected, detected) <= 48);
-      });
-      const styleGuideMatchScore = expectedColors.length
-        ? Math.round((matchedColors.length / expectedColors.length) * 100)
-        : null;
-      const vagueCta = callToAction && /click here|learn more|explore more|find out more/i.test(callToAction);
-
-      const designCtaAnalysis = analyzeEmailCta(emailCopy || callToAction, ctaButton);
-
-      setCreativeFindings({
-        pagesScanned: canvases.length,
-        styleGuidePagesScanned: styleGuideCanvases.length,
-        styleGuideFileName,
-        styleGuideError,
-        styleGuideText: styleGuideText || (styleGuideFile ? 'No readable style-guide text was detected.' : ''),
-        styleGuideMatchScore,
-        wordCount: recognizedText.split(/\s+/).filter(Boolean).length,
-        confidence: canvases.length > 0 && totalConfidence > 0 ? Math.round(totalConfidence / canvases.length) : (ocrAvailable ? 85 : 92),
-        recognizedText: recognizedText || 'No readable text was detected in the uploaded design.',
-        detectedColors,
-        briefAlignmentScore,
-        subjectMatch,
-        preheaderMatch,
-        ctaText: callToAction || (ctaButton?.buttonLike ? 'Button-like block detected; CTA label not readable' : 'No CTA text detected'),
-        ctaButton,
-        ctaAnalysis: designCtaAnalysis,
-        colorAdherence: expectedColors.length
-          ? `${matchedColors.length} of ${expectedColors.length} reference colors were found in the final design palette.`
-          : 'No usable colors were found in the style guide or typed brief, so palette matching was not assessed.',
-        ctaRecommendation: callToAction
-          ? vagueCta
-            ? `Detected CTA: "${callToAction}" (${ctaButton?.placementLabel || 'Placement unassessed'}). Phrasing is generic ("${callToAction}"); replace with an action verb specific to your core campaign goal.`
-            : `Detected CTA: "${callToAction}" · ${ctaButton?.placementLabel || ''}. ${ctaButton?.placementGuidance || ''}`
-          : ctaButton?.buttonLike
-            ? `Solid button-like region detected (${ctaButton.placementLabel}). Text label was not clearly readable by OCR. Manual inspection required.`
-            : 'No recognizable call-to-action button or text detected on the design canvas.',
-        contentMatch: [
-          subjectMatch === null ? 'Enter the brief and final subject in Audit Studio and Creative Review to compare them.' : `Subject keyword overlap with brief: ${subjectMatch}%.`,
-          preheaderMatch === null ? 'Enter the brief and final pre-header in Audit Studio and Creative Review to compare them.' : `Pre-header keyword overlap with brief: ${preheaderMatch}%.`,
-        ].join(' '),
-      });
-      setCreativeAuditRun(true);
-      setDesignScanStatus('Design scan complete.');
-
-      // If Audit Studio score has been calculated, synchronize with design-verified visual scan
-      setAuditResults((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          ctaAnalysis: designCtaAnalysis,
-        };
-      });
-    } catch (error) {
-      setDesignScanStatus(`Scan failed: ${error.message || 'The design could not be scanned.'}`);
-    } finally {
-      if (worker) await worker.terminate();
-      setIsScanningDesign(false);
-    }
-  };
-
   const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -1455,108 +1001,13 @@ export default function App() {
     setDarkMode((current) => !current);
   };
 
-  const handleClearDesign = () => {
-    if (designUrlRef.current) {
-      URL.revokeObjectURL(designUrlRef.current);
-      designUrlRef.current = null;
-    }
-    setDesignFile(null);
-    setDesignFileName('');
-    setDesignPreviewUrl('');
-    setCreativeFindings(null);
-    setCreativeAuditRun(false);
-    setDesignScanStatus('');
-  };
-
-  const processDesignFile = (file) => {
-    if (!file) return;
-    setDesignFile(file);
-    setDesignFileName(file.name);
-    setCreativeAuditRun(false);
-    setCreativeFindings(null);
-    setDesignScanStatus('Ready to scan.');
-
-    if (designUrlRef.current) {
-      URL.revokeObjectURL(designUrlRef.current);
-      designUrlRef.current = null;
-    }
-
-    try {
-      const url = URL.createObjectURL(file);
-      designUrlRef.current = url;
-      setDesignPreviewUrl(url);
-    } catch (err) {
-      console.warn('Object URL creation failed, using FileReader fallback:', err);
-    }
-
-    // Also read data URL in background as foolproof fallback for Safari / restricted environments
-    if (!file.type?.includes('pdf') && !file.name?.toLowerCase().endsWith('.pdf')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        if (e.target?.result) {
-          setDesignPreviewUrl(e.target.result);
-        }
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleDesignFile = (event) => {
-    const file = event.target?.files?.[0];
-    if (file) {
-      processDesignFile(file);
-    }
-  };
-
-  const handleDesignDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingDesign(true);
-  };
-
-  const handleDesignDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingDesign(false);
-  };
-
-  const handleDesignDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingDesign(false);
-    let file = e.dataTransfer?.files?.[0];
-    if (!file && e.dataTransfer?.items?.length) {
-      for (const item of e.dataTransfer.items) {
-        if (item.kind === 'file') {
-          file = item.getAsFile();
-          if (file) break;
-        }
-      }
-    }
-    if (file) {
-      processDesignFile(file);
-    }
-  };
-
-  const handleStyleGuideFile = (event) => {
-    const file = event.target?.files?.[0];
-    if (file) {
-      setStyleGuideFile(file);
-      setStyleGuideFileName(file.name);
-      setCreativeAuditRun(false);
-      setCreativeFindings(null);
-      setDesignScanStatus('Style guide ready to compare.');
-    }
-  };
-
   const handleCalculateScore = async () => {
     if (!emailCopy.trim()) {
       alert('Please add a subject line and email copy before running the audit.');
       return;
     }
 
-    // In Email Copy Audit Studio, visual contrast architecture only applies if a design has been uploaded
-    const ctaAnalysis = creativeFindings?.ctaButton ? analyzeEmailCta(emailCopy, creativeFindings.ctaButton) : null;
+    const ctaAnalysis = analyzeEmailCta(emailCopy);
 
     const evaluatedRules = rules.map((rule) => {
       const checkpoint = MANUAL_CHECKPOINTS.find((item) => item.ruleId === rule.id);
@@ -1577,49 +1028,54 @@ export default function App() {
           earned = rule.weight;
           reason = 'Confirmed by the reviewer using the manual checkpoint.';
         } else if (ctaAnalysis && ctaAnalysis.isDetected) {
-          if (ctaAnalysis.foldVerdict === 'above_fold' && !ctaAnalysis.isVague && ctaAnalysis.competingCount <= 1) {
+          if (!ctaAnalysis.isVague && ctaAnalysis.competingCount <= 1) {
             pass = true;
             status = 'pass';
             earned = rule.weight;
-            reason = `Optimal: Primary CTA "${ctaAnalysis.primaryCtaText}" confirmed above the fold (${ctaAnalysis.placementBadge}) in design scan.`;
+            reason = `Optimal: Primary CTA "${ctaAnalysis.primaryCtaText}" detected and focused.`;
           } else {
             pass = false;
             status = 'warning';
             earned = Math.round(rule.weight * 0.5);
-            reason = `CTA "${ctaAnalysis.primaryCtaText}" detected in design. Review placement and clarity.`;
+            reason = `CTA "${ctaAnalysis.primaryCtaText}" detected. Review placement and clarity.`;
           }
         } else {
           pass = false;
           status = 'warning';
           earned = Math.round(rule.weight * 0.5);
-          reason = 'Visual CTA prominence and fold placement are verified upon uploading a design in Creative Review.';
+          reason = 'Not confirmed; review CTA clarity and ensure a single primary action.';
         }
       }
 
-      // Rule 8: Accessibility Is Good Design (contrast integration)
-      if (rule.id === 'r8' && !checkpoint) {
-        if (ctaAnalysis && ctaAnalysis.contrastRatio !== null) {
+      // Rule 8: Accessibility Is Good Design
+      if (rule.id === 'r8') {
+        if (checkpoint && manualChecks[checkpoint.id]) {
+          pass = true;
+          status = 'pass';
+          earned = rule.weight;
+          reason = 'Confirmed by the reviewer using the manual checkpoint.';
+        } else if (ctaAnalysis && ctaAnalysis.contrastRatio !== null) {
           if (ctaAnalysis.contrastRatio < 3.0) {
             pass = false;
             status = 'alert';
             earned = 0;
-            reason = `Accessibility alert: Design CTA contrast (${ctaAnalysis.contrastRatio}:1) fails WCAG AA minimum threshold (4.5:1).`;
+            reason = `Accessibility alert: HTML CTA contrast (${ctaAnalysis.contrastRatio}:1) fails WCAG AA minimum threshold (4.5:1).`;
           } else if (ctaAnalysis.contrastRatio >= 4.5) {
             pass = true;
             status = 'pass';
             earned = rule.weight;
-            reason = `Confirmed: Design CTA contrast (${ctaAnalysis.contrastRatio}:1) satisfies WCAG 2.1 AA requirements.`;
+            reason = `Confirmed: HTML CTA contrast (${ctaAnalysis.contrastRatio}:1) satisfies WCAG 2.1 AA requirements.`;
           } else {
             pass = false;
             status = 'warning';
             earned = Math.round(rule.weight * 0.5);
-            reason = `Design CTA contrast (${ctaAnalysis.contrastRatio}:1) is below WCAG AA standard (4.5:1).`;
+            reason = `HTML CTA contrast (${ctaAnalysis.contrastRatio}:1) is below WCAG AA standard (4.5:1).`;
           }
         } else {
           pass = false;
           status = 'warning';
           earned = Math.round(rule.weight * 0.5);
-          reason = 'Visual contrast ratio is verified upon uploading a design in Creative Review.';
+          reason = 'Accessibility, contrast, alt text, and dark-mode behavior require verification.';
         }
       }
 
@@ -1716,15 +1172,7 @@ export default function App() {
                 </span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('creative')}
-                className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 transition-all ${activeTab === 'creative' ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
-              >
-                <Palette className="h-3.5 w-3.5" />
-                <span>Creative Review</span>
-              </button>
-            </nav>
+              </nav>
 
             <div className="flex items-center space-x-2 pl-1">
               {user && !user.isAnonymous ? (
@@ -2451,413 +1899,6 @@ export default function App() {
           </div>
         )}
 
-        {activeTab === 'creative' && (
-          <div className="space-y-6">
-            <div className={`section-card rounded-2xl border-0 p-6 shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-              <div className="flex items-center space-x-2">
-                <Palette className="h-5 w-5 text-[#80949B]" />
-                <h2 className="text-lg font-black tracking-tight">Creative Review & CI Adherence Studio</h2>
-              </div>
-              <p className={`mt-1 text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                Preview the final design, compare final subject and pre-header copy with the Audit Studio brief, and inspect CTA button styling.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-              <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-6 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Final Email Design & Client Brief</h3>
-
-                <div
-                  onDragOver={handleDesignDragOver}
-                  onDragEnter={handleDesignDragOver}
-                  onDragLeave={handleDesignDragLeave}
-                  onDrop={handleDesignDrop}
-                  onClick={() => designFileInputRef.current?.click()}
-                  className={`relative rounded-xl border-2 border-dashed p-6 text-center transition-all cursor-pointer ${
-                    isDraggingDesign
-                      ? 'border-[#FF002D] bg-[#FF002D]/10 ring-2 ring-[#FF002D]/30'
-                      : darkMode
-                      ? 'border-[#405E69]/50 bg-[#002230] hover:border-[#80949B] hover:bg-[#002b3d]'
-                      : 'border-slate-300 bg-[#F4F6F9] hover:border-slate-400 hover:bg-slate-100'
-                  }`}
-                >
-                  <input
-                    ref={designFileInputRef}
-                    type="file"
-                    id="designUploadInput"
-                    className="sr-only"
-                    onClick={(e) => { e.currentTarget.value = null; }}
-                    onChange={handleDesignFile}
-                    accept="image/*,.png,.jpg,.jpeg,.webp,.svg,.pdf,application/pdf"
-                  />
-                  <div className="space-y-3 pointer-events-none">
-                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-[#405E69]/20 text-[#405E69] dark:text-[#BFC9CE]">
-                      <Upload className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                        {designFileName ? `Selected: ${designFileName}` : 'Choose or drop your final email design'}
-                      </p>
-                      <p className={`mt-1 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                        Supports JPG, PNG, WEBP, SVG, or PDF
-                      </p>
-                    </div>
-                    <span className="inline-flex items-center space-x-1.5 rounded-lg bg-[#405E69] px-3 py-1.5 text-[11px] font-bold text-white shadow-xs">
-                      <Eye className="h-3.5 w-3.5" />
-                      <span>{designFileName ? 'Replace File' : 'Browse Files'}</span>
-                    </span>
-                  </div>
-                </div>
-                {designScanStatus && <p className={`text-[11px] ${designScanStatus.startsWith('Scan failed') || designScanStatus.startsWith('Upload') ? 'text-rose-400' : darkMode ? 'text-[#80949B]' : 'text-slate-500'}`} role="status">{designScanStatus}</p>}
-
-                {designPreviewUrl && (
-                  <div className={`overflow-hidden rounded-xl border-0 shadow-xs ${darkMode ? 'bg-[#001D29]' : 'bg-[#E9EDF2]'}`}>
-                    <div className={`flex items-center justify-between border-b border-black/5 dark:border-white/5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      <span className="flex items-center space-x-1.5 truncate">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                        <span className="truncate">{designFileName}</span>
-                        {designFile?.size && (
-                          <span className="font-mono text-[9px] text-[#80949B]">
-                            ({(designFile.size / 1024).toFixed(1)} KB)
-                          </span>
-                        )}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleClearDesign}
-                        className="text-[10px] font-bold text-[#FF002D] hover:underline cursor-pointer shrink-0 ml-2"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    {designFile?.type === 'application/pdf' || designFile?.name?.toLowerCase().endsWith('.pdf') ? (
-                      <iframe title="Final email design preview" src={designPreviewUrl} className="h-96 w-full bg-white" />
-                    ) : (
-                      <div className="max-h-[34rem] overflow-auto bg-white p-3 text-center">
-                        <img
-                          src={designPreviewUrl}
-                          alt={`Preview of ${designFileName}`}
-                          className="mx-auto block max-h-[32rem] w-auto max-w-full object-contain rounded-md"
-                          onError={() => {
-                            if (designFile) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => {
-                                if (ev.target?.result) setDesignPreviewUrl(ev.target.result);
-                              };
-                              reader.readAsDataURL(designFile);
-                            }
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div>
-                  <label className="mb-1 block text-xs font-medium">Client Design Brief</label>
-                  <textarea rows={4} placeholder="Describe the intended layout, brand colors (include hex values), typography, imagery, accessibility needs, and CTA treatment." value={designBriefContent} onChange={(e) => setDesignBriefContent(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400'}`} />
-                </div>
-
-                <div className={`rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                  <label htmlFor="styleGuideUploadInput" className="mb-2 block text-xs font-medium">Style Guide Reference (optional PDF or image)</label>
-                  <input
-                    ref={styleGuideInputRef}
-                    id="styleGuideUploadInput"
-                    type="file"
-                    onClick={(e) => { e.currentTarget.value = null; }}
-                    onChange={handleStyleGuideFile}
-                    accept="image/*,.png,.jpg,.jpeg,.webp,.svg,.pdf,application/pdf"
-                    className={`block w-full text-[11px] file:mr-3 file:rounded-md file:border-0 file:bg-[#405E69] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white ${darkMode ? 'text-[#BFC9CE]' : 'text-slate-600'}`}
-                  />
-                  <p className={`mt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                    {styleGuideFileName ? `Selected: ${styleGuideFileName}` : 'Upload a PDF or image guide to compare its palette and visible standards with the final design.'}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block font-medium">Final Subject</label>
-                    <input type="text" placeholder="e.g. Product Update Announcement" value={creativeSubject} onChange={(e) => setCreativeSubject(e.target.value)} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400'}`} />
-                  </div>
-                  <div>
-                    <label className="mb-1 block font-medium">Final Pre-Header</label>
-                    <input type="text" placeholder="e.g. Action required by 28 Feb" value={creativePreheader} onChange={(e) => setCreativePreheader(e.target.value)} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400'}`} />
-                  </div>
-                </div>
-                <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                  These final values are compared with the briefed subject and pre-header entered under Email Content & Headers; they do not need to appear inside the Figma render.
-                </p>
-
-                <button type="button" onClick={handleRunCreativeReview} disabled={isScanningDesign} className="flex w-full items-center justify-center space-x-2 rounded-xl bg-[#405E69] px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow-xs disabled:cursor-wait disabled:opacity-60">
-                  <Target className="h-4 w-4" />
-                  <span>{isScanningDesign ? 'Scanning Final Design...' : 'Run Creative & CI Alignment Review'}</span>
-                </button>
-              </div>
-
-              <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-6 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Creative Review Audit Results</h3>
-
-                {creativeAuditRun && creativeFindings ? (
-                  <div className="space-y-4 text-xs animate-fadeIn">
-                    <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
-                      <div>
-                        <span className={`text-[10px] font-bold uppercase ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Final Design Scan</span>
-                        <div className="mt-1 text-xs font-semibold">{designFileName}</div>
-                        <p className={`mt-1 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                          {creativeFindings.pagesScanned} page(s), {creativeFindings.wordCount} words detected
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-xs font-bold">{creativeFindings.confidence}%</span>
-                        <span className="block text-[10px] font-medium text-[#80949B]">OCR confidence</span>
-                        <span className="mt-1 block text-lg font-black">{creativeFindings.briefAlignmentScore === null ? 'N/A' : `${creativeFindings.briefAlignmentScore}%`}</span>
-                        <span className="block text-[10px] font-medium text-[#80949B]">Brief copy alignment</span>
-                        <span className="mt-1 block text-lg font-black">{creativeFindings.styleGuideMatchScore === null ? 'N/A' : `${creativeFindings.styleGuideMatchScore}%`}</span>
-                        <span className="block text-[10px] font-medium text-[#80949B]">Reference palette match</span>
-                      </div>
-                    </div>
-
-                    <div className={`space-y-2 rounded-xl border-0 p-4 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                      <strong className="block">Style Guide Reference</strong>
-                      <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                        {creativeFindings.styleGuideFileName
-                          ? `${creativeFindings.styleGuideFileName} · ${creativeFindings.styleGuidePagesScanned} page(s) scanned. ${creativeFindings.colorAdherence}`
-                          : creativeFindings.colorAdherence}
-                      </p>
-                      {creativeFindings.styleGuideError && <p className="text-[11px] text-amber-400">Style guide skipped: {creativeFindings.styleGuideError}</p>}
-                      {creativeFindings.styleGuideText && (
-                        <details>
-                          <summary className="cursor-pointer text-[11px] font-semibold">View text detected in style guide</summary>
-                          <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[10px] leading-relaxed">{creativeFindings.styleGuideText}</pre>
-                        </details>
-                      )}
-                    </div>
-
-                    {/* CTA & Visual Contrast Architecture (Pillars 10 & 08) */}
-                    <div className={`space-y-4 rounded-xl border-0 p-5 shadow-xs ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                      {/* Header */}
-                      <div className="flex flex-col justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-3 sm:flex-row sm:items-center">
-                        <div className="flex items-center space-x-2.5">
-                          <div className="rounded-xl border-0 bg-[#4D1B34] p-2 text-white shadow-xs">
-                            <Target className="h-4 w-4 text-[#FF002D]" />
-                          </div>
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <h4 className="text-xs font-bold uppercase tracking-wider">CTA & Visual Contrast Architecture</h4>
-                              <span className="rounded bg-[#741532]/40 px-2 py-0.5 font-mono text-[9px] text-rose-300">
-                                Pillars 10 & 08
-                              </span>
-                            </div>
-                            <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                              Verified from rendered design canvas, OCR bounding box geometry, and WCAG luminance calculations.
-                            </p>
-                          </div>
-                        </div>
-
-                        <div>
-                          {creativeFindings.ctaButton ? (
-                            <span className="inline-flex items-center space-x-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-400">
-                              <CheckCircle2 className="h-3 w-3" />
-                              <span>CTA Identified in Design</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center space-x-1.5 rounded-full bg-[#FF002D]/10 px-2.5 py-1 text-[11px] font-bold text-[#FF002D]">
-                              <AlertOctagon className="h-3 w-3" />
-                              <span>No CTA Detected</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Primary CTA Outline Banner */}
-                      <div className={`rounded-xl border-0 p-3.5 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-black/5 dark:border-white/5 pb-2.5">
-                          <div>
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-[#80949B]">Primary Call to Action</span>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-black text-[#FF002D] dark:text-rose-400">
-                                "{creativeFindings.ctaText}"
-                              </span>
-                              {creativeFindings.ctaButton?.buttonWidth && (
-                                <span className={`rounded px-1.5 py-0.5 text-[10px] font-mono font-semibold ${darkMode ? 'bg-[#002230] text-[#BFC9CE]' : 'bg-slate-100 text-slate-700'}`}>
-                                  {creativeFindings.ctaButton.buttonWidth} × {creativeFindings.ctaButton.buttonHeight}px
-                                </span>
-                              )}
-                              <span className={`rounded px-2 py-0.5 text-[10px] font-semibold ${darkMode ? 'bg-[#002230] text-[#BFC9CE]' : 'bg-slate-100 text-slate-700'}`}>
-                                {creativeFindings.ctaButton?.buttonLike ? 'Button Element' : 'Text Action'}
-                              </span>
-                            </div>
-                          </div>
-
-                          {creativeFindings.ctaButton?.fillColor && creativeFindings.ctaButton?.textColor && (
-                            <div className="flex items-center space-x-2">
-                              <span className="text-[10px] text-[#80949B]">Rendered Pill:</span>
-                              <div
-                                className="rounded-lg px-3 py-1 text-xs font-bold shadow-xs"
-                                style={{
-                                  backgroundColor: creativeFindings.ctaButton.fillColor,
-                                  color: creativeFindings.ctaButton.textColor,
-                                }}
-                              >
-                                {creativeFindings.ctaText.slice(0, 24)}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
-                          {creativeFindings.ctaRecommendation}
-                        </p>
-                      </div>
-
-                      {/* 4-Metric Diagnostic Grid */}
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {/* 1. Placement & Fold Position */}
-                        <div className={`space-y-1.5 rounded-xl border-0 p-3 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Placement & Fold</span>
-                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                              creativeFindings.ctaButton?.foldVerdict === 'above_fold'
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : creativeFindings.ctaButton?.foldVerdict === 'mid_body'
-                                  ? 'bg-amber-500/20 text-amber-400'
-                                  : 'bg-[#FF002D]/20 text-[#FF002D]'
-                            }`}>
-                              {creativeFindings.ctaButton?.foldVerdict === 'above_fold' ? 'Optimal' : creativeFindings.ctaButton?.foldVerdict === 'mid_body' ? 'Acceptable' : 'High Risk'}
-                            </span>
-                          </div>
-                          <p className="text-xs font-bold">{creativeFindings.ctaButton?.placementLabel || 'Not assessed'}</p>
-                          
-                          {/* Fold progress bar */}
-                          <div className="space-y-1">
-                            <div className="relative h-1.5 w-full rounded-full bg-slate-700/30">
-                              <div
-                                className={`h-full rounded-full ${creativeFindings.ctaButton?.foldVerdict === 'above_fold' ? 'bg-emerald-500' : creativeFindings.ctaButton?.foldVerdict === 'mid_body' ? 'bg-amber-500' : 'bg-[#FF002D]'}`}
-                                style={{ width: `${Math.min(100, Math.max(5, creativeFindings.ctaButton?.placementYPercent || 35))}%` }}
-                              />
-                              <div className="absolute top-0 bottom-0 left-[40%] w-0.5 bg-white/40" title="40% Fold line" />
-                            </div>
-                            <div className="flex justify-between text-[8px] text-[#80949B]">
-                              <span>Top 0%</span>
-                              <span className="text-slate-400">Fold 40%</span>
-                              <span>Bottom</span>
-                            </div>
-                          </div>
-                          <p className={`text-[10px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                            {creativeFindings.ctaButton?.placementGuidance || 'Button fold placement based on vertical canvas coordinates.'}
-                          </p>
-                        </div>
-
-                        {/* 2. WCAG Contrast Ratio */}
-                        <div className={`space-y-1.5 rounded-xl border-0 p-3 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Contrast Ratio</span>
-                            {creativeFindings.ctaButton?.wcagEvaluation && (
-                              <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${creativeFindings.ctaButton.wcagEvaluation.badgeBg} ${creativeFindings.ctaButton.wcagEvaluation.badgeText}`}>
-                                {creativeFindings.ctaButton.wcagEvaluation.label}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-baseline space-x-1.5">
-                            <span className="text-xl font-black">
-                              {creativeFindings.ctaButton?.contrastRatio ? `${creativeFindings.ctaButton.contrastRatio}:1` : '—'}
-                            </span>
-                            <span className="text-[9px] text-[#80949B]">(AA min 4.5:1)</span>
-                          </div>
-                          {creativeFindings.ctaButton?.fillColor && creativeFindings.ctaButton?.textColor && (
-                            <div className="flex items-center space-x-1 text-[10px] font-mono">
-                              <span className="h-2.5 w-2.5 rounded-full border border-white/20" style={{ backgroundColor: creativeFindings.ctaButton.textColor }} />
-                              <span>{creativeFindings.ctaButton.textColor}</span>
-                              <span className="text-slate-500">on</span>
-                              <span className="h-2.5 w-2.5 rounded-full border border-white/20" style={{ backgroundColor: creativeFindings.ctaButton.fillColor }} />
-                              <span>{creativeFindings.ctaButton.fillColor}</span>
-                            </div>
-                          )}
-                          <p className={`text-[10px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                            {creativeFindings.ctaButton?.wcagEvaluation?.description || 'Calculated from sampled button fill and foreground typography.'}
-                          </p>
-                        </div>
-
-                        {/* 3. Touch Tap Target */}
-                        <div className={`space-y-1.5 rounded-xl border-0 p-3 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Touch Tap Target</span>
-                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                              creativeFindings.ctaButton?.touchTargetMeetsStandard
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : 'bg-amber-500/20 text-amber-400'
-                            }`}>
-                              {creativeFindings.ctaButton?.touchTargetMeetsStandard ? 'Pass Standard' : 'Sub-44px'}
-                            </span>
-                          </div>
-                          <p className="text-xs font-bold">
-                            {creativeFindings.ctaButton?.buttonHeight ? `${creativeFindings.ctaButton.buttonHeight}px height` : 'Not assessable'}
-                          </p>
-                          <p className={`text-[10px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                            {creativeFindings.ctaButton?.touchTargetMeetsStandard
-                              ? 'Meets Apple HIG & Material 44×44px minimum tap target to prevent missed clicks.'
-                              : 'Button height is smaller than 44px; increase padding for mobile accessibility.'}
-                          </p>
-                        </div>
-
-                        {/* 4. Visual Prominence */}
-                        <div className={`space-y-1.5 rounded-xl border-0 p-3 ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#80949B]">Prominence</span>
-                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                              creativeFindings.ctaButton?.standoutColor
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : 'bg-slate-700 text-slate-300'
-                            }`}>
-                              {creativeFindings.ctaButton?.standoutColor ? 'Standout Fill' : 'Low Contrast'}
-                            </span>
-                          </div>
-                          <p className="text-xs font-bold">
-                            {creativeFindings.ctaButton?.buttonLike ? 'Button-shaped container' : 'Text-link style'}
-                          </p>
-                          <p className={`text-[10px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                            {creativeFindings.ctaButton?.standoutColor
-                              ? `High chroma fill (${creativeFindings.ctaButton.fillColor}) distinguishes action from background.`
-                              : 'Button lacks high-chroma standout fill against canvas.'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2.5">
-                      <div className={`flex items-start space-x-2 rounded-xl border-0 p-3.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                        <div>
-                          <strong className="block">Brief Subject & Pre-Header Comparison:</strong>
-                          <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{creativeFindings.contentMatch}</p>
-                        </div>
-                      </div>
-
-                      <div className={`flex items-start space-x-2 rounded-xl border-0 p-3.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-                        <div>
-                          <strong className="block">Final Design Palette:</strong>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                            {creativeFindings.detectedColors.map((color) => <span key={color} className="h-5 w-5 rounded border border-white/30" style={{ backgroundColor: color }} title={color} />)}
-                          </div>
-                        </div>
-                      </div>
-                      <details className={`rounded-xl border-0 p-3.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                        <summary className="cursor-pointer text-xs font-semibold">View text detected in the final design</summary>
-                        <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-[11px] leading-relaxed">{creativeFindings.recognizedText}</pre>
-                      </details>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={`rounded-xl border-0 p-8 text-center ${darkMode ? 'bg-[#002230] text-[#80949B]' : 'bg-[#F4F6F9] text-slate-400'}`}>
-                    <MousePointer className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                    <p className="text-xs">Upload the final email design, add the client brief and final subject details, then run the scan to inspect detected copy and colors.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </main>
     </div>
   );

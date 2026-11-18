@@ -1192,14 +1192,7 @@ export default function App() {
                 </button>
               )}
 
-              <button
-                type="button"
-                aria-label="Toggle theme"
-                onClick={toggleTheme}
-                className={`rounded-xl p-2 transition-all ${darkMode ? 'bg-[#062D3C] text-amber-300 hover:bg-[#08384b]' : 'bg-white text-slate-700 hover:bg-slate-100 shadow-xs'}`}
-              >
-                {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              </button>
+
             </div>
           </div>
         </div>

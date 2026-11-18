@@ -1130,7 +1130,7 @@ export default function App() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center space-x-3">
             <div>
-              <img rel="logo" type="image/png" src="/dark_switch_logo.png"/>
+              <img class="platform-logo" rel="logo" type="image/png" src="public/dark_switch_logo.png"/>
             </div>
           </div>
 

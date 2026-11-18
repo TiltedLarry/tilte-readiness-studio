@@ -1129,16 +1129,8 @@ export default function App() {
       <header className={`sticky top-0 z-40 backdrop-blur-md transition-colors ${darkMode ? 'bg-[#001D27]/90 text-slate-100 border-b border-white/5' : 'bg-white/90 text-slate-900 border-b border-slate-200/40 shadow-xs'}`}>
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center space-x-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#4D1B34] text-white shadow-sm">
-              <span className="text-base font-black tracking-tighter">T</span>
-            </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-base font-extrabold tracking-tight sm:text-lg">Tilte</span>
-              </div>
-              <p className={`hidden text-[11px] sm:block ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                Email Campaign Readiness Studio
-              </p>
+              <img rel="logo" type="image/png" src="/dark_switch_logo.png"/>
             </div>
           </div>
 

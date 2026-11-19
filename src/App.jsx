@@ -44,6 +44,7 @@ import {
 
 import { auth, db, SUPER_ADMIN_EMAIL, APP_ID } from './firebase';
 import CreativeScanner from './CreativeScanner';
+import './App.css';
 
 const DEFAULT_RULES = [
   { id: 'r1', pillar: '01 / Getting In', pillarIndex: 1, code: '01', title: 'Prove & Show Who You Are', desc: 'SPF, DKIM, DMARC alignment, plus BIMI brand logo verification.', weight: 7 },
@@ -212,8 +213,7 @@ function evaluateWcagCompliance(ratio) {
       level: 'unverified',
       label: 'Unverified',
       pass: false,
-      badgeBg: 'bg-slate-700/60',
-      badgeText: 'text-slate-300',
+      badgeClass: 'rating-badge-pending',
       description: 'Visual contrast unverified — pending HTML button styles.',
     };
   }
@@ -222,8 +222,7 @@ function evaluateWcagCompliance(ratio) {
       level: 'aaa',
       label: 'WCAG AAA (Enhanced)',
       pass: true,
-      badgeBg: 'bg-emerald-600',
-      badgeText: 'text-white',
+      badgeClass: 'rating-badge-strong',
       description: 'Exceptional contrast. Readable across all screen brightness settings and lighting environments.',
     };
   }
@@ -232,8 +231,7 @@ function evaluateWcagCompliance(ratio) {
       level: 'aa',
       label: 'WCAG AA Pass',
       pass: true,
-      badgeBg: 'bg-emerald-500',
-      badgeText: 'text-white',
+      badgeClass: 'rating-badge-strong',
       description: 'Meets WCAG 2.1 AA requirements (≥4.5:1) for standard text and interactive buttons.',
     };
   }
@@ -242,8 +240,7 @@ function evaluateWcagCompliance(ratio) {
       level: 'aa_large_only',
       label: 'Large Text Only (≥3.0:1)',
       pass: false,
-      badgeBg: 'bg-amber-500',
-      badgeText: 'text-white',
+      badgeClass: 'rating-badge-warn',
       description: 'Borderline. Passes WCAG AA only for large text (≥18pt bold or ≥24pt regular); fails standard text.',
     };
   }
@@ -251,8 +248,7 @@ function evaluateWcagCompliance(ratio) {
     level: 'fail',
     label: 'WCAG Fail (<3.0:1)',
     pass: false,
-    badgeBg: 'bg-[#FF002D]',
-    badgeText: 'text-white',
+    badgeClass: 'rating-badge-risk',
     description: 'Fails WCAG accessibility standards. Illegible contrast (<3:1) causing reader disengagement.',
   };
 }
@@ -831,7 +827,7 @@ export default function App() {
           }
           if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
             setSources(data.sources);
-            if (!selectedSource) setSelectedSource(data.sources[0]);
+            setSelectedSource((current) => current || data.sources[0]);
           }
         } else {
           setDoc(methodologyDocRef, {
@@ -1095,10 +1091,10 @@ export default function App() {
     const score = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0;
 
     const ratingBadge = score >= 85
-      ? { label: 'Strong Match', bg: 'bg-emerald-500', text: 'text-white' }
+      ? { label: 'Strong Match', badgeClass: 'rating-badge-strong' }
       : score >= 70
-        ? { label: 'Needs Refinement', bg: 'bg-amber-500', text: 'text-white' }
-        : { label: 'High Risk', bg: 'bg-[#FF002D]', text: 'text-white' };
+        ? { label: 'Needs Refinement', badgeClass: 'rating-badge-warn' }
+        : { label: 'High Risk', badgeClass: 'rating-badge-risk' };
 
     // Set score immediately; simulations load asynchronously
     setAuditResults({
@@ -1125,77 +1121,75 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen font-sans transition-colors duration-200 ${darkMode ? 'bg-[#001D27] text-slate-100' : 'bg-[#EEF1F6] text-slate-900'}`}>
-      <header className={`sticky top-0 z-40 backdrop-blur-md transition-colors ${darkMode ? 'bg-[#001D27]/90 text-slate-100 border-b border-white/5' : 'bg-white/90 text-slate-900 border-b border-slate-200/40 shadow-xs'}`}>
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center space-x-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#4D1B34] text-white shadow-sm">
-              <span className="text-base font-black tracking-tighter">T</span>
+    <div className={`app-shell ${darkMode ? 'theme-dark' : 'theme-light'}`}>
+      <header className="app-header">
+        <div className="app-header-inner">
+          <div className="brand-group">
+            <div className="brand-logo">
+              <span>T</span>
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-base font-extrabold tracking-tight sm:text-lg">Tilte</span>
-              </div>
-              <p className={`hidden text-[11px] sm:block ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+              <span className="brand-title">Tilte</span>
+              <p className="brand-subtitle">
                 Email Campaign Readiness Studio
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <nav className={`flex rounded-xl p-1 text-xs font-semibold sm:text-sm ${darkMode ? 'bg-[#062D3C]' : 'bg-[#E2E7EE]'}`}>
+          <div className="header-actions">
+            <nav className="nav-tabs">
               <button
                 type="button"
                 onClick={() => setActiveTab('studio')}
-                className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 transition-all ${activeTab === 'studio' ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                className={`nav-tab ${activeTab === 'studio' ? 'nav-tab-active' : ''}`}
               >
-                <Edit3 className="h-3.5 w-3.5" />
+                <Edit3 className="icon-xs" />
                 <span>Audit Studio</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('report')}
-                className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 transition-all ${activeTab === 'report' ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                className={`nav-tab ${activeTab === 'report' ? 'nav-tab-active' : ''}`}
               >
-                <FileText className="h-3.5 w-3.5" />
+                <FileText className="icon-xs" />
                 <span>Client Report</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('methodology')}
-                className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 transition-all ${activeTab === 'methodology' ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                className={`nav-tab ${activeTab === 'methodology' ? 'nav-tab-active' : ''}`}
               >
-                <BookOpen className="h-3.5 w-3.5" />
-                <span className="flex items-center space-x-1">
+                <BookOpen className="icon-xs" />
+                <span className="nav-tab-label">
                   <span>Current Methodologies</span>
-                  {userRole === 'admin' ? <span className="h-1.5 w-1.5 rounded-full bg-[#FF002D]" title="Admin Edit Rights Active" /> : null}
+                  {userRole === 'admin' ? <span className="admin-dot" title="Admin Edit Rights Active" /> : null}
                 </span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('design')}
-                className={`flex items-center space-x-1.5 rounded-lg px-3 py-1.5 transition-all ${activeTab === 'design' ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}
+                className={`nav-tab ${activeTab === 'design' ? 'nav-tab-active' : ''}`}
               >
-                <Sparkles className="h-3.5 w-3.5" />
+                <Sparkles className="icon-xs" />
                 <span>Design Review</span>
               </button>
             </nav>
 
-            <div className="flex items-center space-x-2 pl-1">
+            <div className="user-controls">
               {user && !user.isAnonymous ? (
-                <div className="flex items-center space-x-1.5">
-                  <span className={`hidden max-w-[110px] truncate text-[11px] md:inline ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                <div className="user-badge">
+                  <span className="user-email">
                     {user.email}
                   </span>
-                  <button type="button" onClick={handleSignOut} title="Sign Out" className={`rounded-xl p-1.5 transition-colors ${darkMode ? 'bg-[#062D3C] text-[#80949B] hover:text-white' : 'bg-white text-slate-600 hover:text-slate-900 shadow-xs'}`}>
-                    <LogOut className="h-3.5 w-3.5" />
+                  <button type="button" onClick={handleSignOut} title="Sign Out" className="icon-btn">
+                    <LogOut className="icon-xs" />
                   </button>
                 </div>
               ) : (
-                <button type="button" onClick={() => setShowAuthModal(true)} className="rounded-xl bg-[#405E69] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#741532] shadow-sm">
+                <button type="button" onClick={() => setShowAuthModal(true)} className="btn-primary-sm">
                   Sign In
                 </button>
               )}
@@ -1204,9 +1198,9 @@ export default function App() {
                 type="button"
                 aria-label="Toggle theme"
                 onClick={toggleTheme}
-                className={`rounded-xl p-2 transition-all ${darkMode ? 'bg-[#062D3C] text-amber-300 hover:bg-[#08384b]' : 'bg-white text-slate-700 hover:bg-slate-100 shadow-xs'}`}
+                className="theme-toggle-btn"
               >
-                {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {darkMode ? <Sun className="icon-sm" /> : <Moon className="icon-sm" />}
               </button>
             </div>
           </div>
@@ -1214,71 +1208,67 @@ export default function App() {
       </header>
 
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className={`w-full max-w-sm space-y-4 rounded-2xl p-6 shadow-2xl transition-all ${darkMode ? 'bg-[#072E3D] text-white' : 'bg-white text-slate-900'}`}>
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-3">
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <div className="modal-header">
               <div>
-                <h3 className="text-sm font-bold">{authMode === 'login' ? 'Tilte Team Authentication' : 'Create Campaign Studio Account'}</h3>
-                <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                  Connect for real-time Firestore sync & role governance.
+                <h3 className="modal-title">{authMode === 'login' ? 'Tilte Team Authentication' : 'Create Campaign Studio Account'}</h3>
+                <p className="modal-subtitle">
+                  Connect for real-time Firestore sync &amp; role governance.
                 </p>
               </div>
-              <button type="button" onClick={() => setShowAuthModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">
-                <X className="h-5 w-5" />
+              <button type="button" onClick={() => setShowAuthModal(false)} className="modal-close-btn">
+                <X className="icon-md" />
               </button>
             </div>
 
-            {authError && <div className="rounded-xl bg-[#FF002D]/10 p-2.5 text-xs text-[#FF002D]">{authError}</div>}
+            {authError && <div className="auth-error-banner">{authError}</div>}
 
-            <form onSubmit={handleAuthSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="mb-1 block font-medium">Email Address</label>
+            <form onSubmit={handleAuthSubmit} className="modal-form">
+              <div className="form-field">
+                <label className="form-label">Email Address</label>
                 <input
                   type="email"
                   required
                   placeholder="name@tilte.com"
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
-                  className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 transition-colors ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`}
+                  className="form-input"
                 />
               </div>
 
-              <div>
-                <label className="mb-1 block font-medium">Password</label>
+              <div className="form-field">
+                <label className="form-label">Password</label>
                 <input
                   type="password"
                   required
                   placeholder="••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 transition-colors ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`}
+                  className="form-input"
                 />
               </div>
 
-              <button type="submit" className="w-full rounded-xl bg-[#405E69] py-3 text-xs font-bold uppercase tracking-wider text-white transition-colors hover:bg-[#741532] shadow-sm">
+              <button type="submit" className="btn-submit-full">
                 {authMode === 'login' ? 'Sign In' : 'Register Account'}
               </button>
             </form>
 
-            <div className="relative py-1">
-              <div className="absolute inset-0 flex items-center">
-                <div className={`w-full border-t ${darkMode ? 'border-white/10' : 'border-slate-100'}`} />
-              </div>
-              <div className="relative flex justify-center text-[10px] uppercase">
-                <span className={`px-2 ${darkMode ? 'bg-[#072E3D] text-[#80949B]' : 'bg-white text-slate-400'}`}>Or</span>
-              </div>
+            <div className="divider-row">
+              <div className="divider-line" />
+              <span className="divider-label">Or</span>
             </div>
 
             <button
               type="button"
               onClick={handleGoogleSignIn}
-              className={`flex w-full items-center justify-center space-x-2 rounded-xl border-0 py-2.5 text-xs font-semibold transition-colors ${darkMode ? 'bg-[#002230] text-white hover:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-800 hover:bg-[#E9EEF4]'}`}
+              className="btn-secondary-full"
             >
               <span>Sign in with Google</span>
             </button>
 
-            <div className="pt-2 text-center">
-              <button type="button" onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-[11px] text-[#80949B] underline hover:text-[#BFC9CE]">
+            <div className="auth-switch-row">
+              <button type="button" onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="auth-switch-btn">
                 {authMode === 'login' ? "Don't have an account? Create one" : 'Already have an account? Sign in'}
               </button>
             </div>
@@ -1286,10 +1276,10 @@ export default function App() {
         </div>
       )}
 
-      <main className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="app-main">
         {activeTab === 'studio' && (
-          <div className="space-y-8">
-            <div className={`grid grid-cols-3 rounded-2xl p-1.5 transition-colors shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`} role="tablist" aria-label="Audit steps">
+          <div className="tab-section">
+            <div className="stepper-bar" role="tablist" aria-label="Audit steps">
               {[
                 { id: 'metadata', label: 'Campaign Metadata & Objectives', number: '01' },
                 { id: 'verification', label: 'Manual Verification Checkpoints', number: '02' },
@@ -1301,228 +1291,219 @@ export default function App() {
                   role="tab"
                   aria-selected={auditStep === step.id}
                   onClick={() => setAuditStep(step.id)}
-                  className={`flex min-h-14 items-center justify-center gap-2 rounded-xl px-2 py-2 text-center text-[11px] font-semibold transition-all sm:text-xs ${auditStep === step.id ? 'bg-[#405E69] text-white shadow-sm' : darkMode ? 'text-[#80949B] hover:text-white hover:bg-[#002230]/50' : 'text-slate-600 hover:text-slate-900 hover:bg-[#F4F6F9]'}`}
+                  className={`stepper-tab ${auditStep === step.id ? 'stepper-tab-active' : ''}`}
                 >
-                  <span className="font-mono text-[10px] opacity-70">{step.number}</span>
+                  <span className="stepper-num">{step.number}</span>
                   <span>{step.label}</span>
                 </button>
               ))}
             </div>
 
-            <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
-              <div className="contents">
-                {auditStep === 'metadata' && (
-                <div className={`space-y-5 rounded-2xl p-6 lg:col-span-12 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                  <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
-                    <Building2 className="h-4 w-4" />
-                    <span>Campaign Metadata & Objectives</span>
-                  </h3>
+            {auditStep === 'metadata' && (
+              <div className="section-card">
+                <h3 className="section-heading">
+                  <Building2 className="icon-sm" />
+                  <span>Campaign Metadata &amp; Objectives</span>
+                </h3>
 
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Client Name</label>
-                      <input type="text" placeholder="e.g. Acme Group" value={clientName} onChange={(e) => setClientName(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Campaign Name</label>
-                      <input type="text" placeholder="e.g. Spring Product Launch" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
-                    </div>
+                <div className="form-grid-2">
+                  <div className="form-field">
+                    <label className="form-label">Client Name</label>
+                    <input type="text" placeholder="e.g. Acme Group" value={clientName} onChange={(e) => setClientName(e.target.value)} className="form-input" />
                   </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Target Audience Segment</label>
-                      <input type="text" placeholder="e.g. New subscribers" value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Core Action / Desired Outcome</label>
-                      <input type="text" placeholder="e.g. Drive product trial signups" value={coreGoal} onChange={(e) => setCoreGoal(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
-                    </div>
-                  </div>
-
-                </div>
-                )}
-
-                {auditStep === 'verification' && (
-                <div className={`space-y-5 rounded-2xl p-6 lg:col-span-12 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Manual Verification Checkpoints</h3>
-                    <p className={`mt-1 text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Confirm these using your sending platform, DNS records, policy documentation, or rendered-email tests. Unchecked items receive no points.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {MANUAL_CHECKPOINTS.map((checkpoint) => (
-                      <label key={checkpoint.id} className={`flex items-start gap-2.5 rounded-xl p-3 text-xs leading-relaxed transition-colors cursor-pointer ${darkMode ? 'bg-[#002230]/60 hover:bg-[#002230]' : 'bg-[#F4F6F9] hover:bg-[#E9EEF4]'}`}>
-                        <input
-                          type="checkbox"
-                          checked={manualChecks[checkpoint.id]}
-                          onChange={(event) => {
-                            setManualChecks((current) => ({ ...current, [checkpoint.id]: event.target.checked }));
-                            setHasCalculated(false);
-                            setAuditResults(null);
-                          }}
-                          className="mt-0.5 shrink-0 accent-[#FF002D]"
-                        />
-                        <span>{checkpoint.label}</span>
-                      </label>
-                    ))}
+                  <div className="form-field">
+                    <label className="form-label">Campaign Name</label>
+                    <input type="text" placeholder="e.g. Spring Product Launch" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} className="form-input" />
                   </div>
                 </div>
-                )}
 
-                {auditStep === 'content' && (
-                <div className={`space-y-5 rounded-2xl p-6 lg:col-span-12 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                  <h3 className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-[#80949B]">
-                    <Mail className="h-4 w-4" />
-                    <span>Email Content & Headers</span>
-                  </h3>
-
-                  <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Briefed Subject Line</label>
-                      <span className={`text-[10px] ${subjectLine.length > 65 ? 'font-bold text-[#FF002D]' : darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>
-                        {subjectLine.length} chars (optimal 20–65)
-                      </span>
-                    </div>
-                    <input type="text" placeholder="e.g. Discover what’s new this season" value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
+                <div className="form-grid-2">
+                  <div className="form-field">
+                    <label className="form-label">Target Audience Segment</label>
+                    <input type="text" placeholder="e.g. New subscribers" value={targetAudience} onChange={(e) => setTargetAudience(e.target.value)} className="form-input" />
                   </div>
-
-                  <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">Briefed Pre-Header (Preview Text)</label>
-                      <span className={`text-[10px] ${preHeader.length < 20 && preHeader.length > 0 ? 'text-[#FF002D]' : darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>
-                        {preHeader.length} chars
-                      </span>
-                    </div>
-                    <input type="text" placeholder="e.g. Explore the latest updates and find your next step." value={preHeader} onChange={(e) => setPreHeader(e.target.value)} className={`w-full rounded-xl border-0 p-3 text-xs focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-900 placeholder-slate-400 focus:bg-white'}`} />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">Full Email Copy (Live Text or HTML)</label>
-                    <textarea rows={10} placeholder="Paste complete message body text or HTML code here..." value={emailCopy} onChange={(e) => setEmailCopy(e.target.value)} className={`w-full rounded-xl border-0 p-3.5 text-xs font-mono leading-relaxed focus:outline-none transition-colors focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-slate-200 placeholder-slate-500 focus:bg-[#002837]' : 'bg-[#F4F6F9] text-slate-800 placeholder-slate-400 focus:bg-white'}`} />
-                  </div>
-                  <div className="pt-2">
-                    <button type="button" onClick={handleCalculateScore} className="flex w-full items-center justify-center space-x-2 rounded-2xl bg-gradient-to-r from-[#741532] via-[#405E69] to-[#002837] px-6 py-4 text-sm font-black uppercase tracking-wider text-white shadow-lg transition-all hover:from-[#FF002D] hover:to-[#741532] transform hover:-translate-y-0.5 active:translate-y-0">
-                      <Zap className="h-4 w-4 fill-current text-[#FF002D]" />
-                      <span>Generate Readiness Score</span>
-                    </button>
-                    <p className={`mt-2 text-center text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Scores and AI inbox simulations are calculated strictly upon clicking this CTA.
-                    </p>
+                  <div className="form-field">
+                    <label className="form-label">Core Action / Desired Outcome</label>
+                    <input type="text" placeholder="e.g. Drive product trial signups" value={coreGoal} onChange={(e) => setCoreGoal(e.target.value)} className="form-input" />
                   </div>
                 </div>
-                )}
               </div>
+            )}
 
-              {hasCalculated && auditResults && (
-                <div className="lg:col-span-12">
-                  <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs transition-all ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                    <div className="flex flex-col justify-between gap-4 border-b border-black/5 dark:border-white/5 pb-5 sm:flex-row sm:items-center">
-                      <div>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Tilte Readiness Scorecard</span>
-                        <div className="mt-1 flex items-baseline space-x-2">
-                          <span className="text-6xl font-black tracking-tight">{auditResults.score}</span>
-                          <span className={`text-xl font-bold ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>/100</span>
-                        </div>
-                      </div>
+            {auditStep === 'verification' && (
+              <div className="section-card">
+                <div>
+                  <h3 className="section-heading">Manual Verification Checkpoints</h3>
+                  <p className="section-desc">
+                    Confirm these using your sending platform, DNS records, policy documentation, or rendered-email tests. Unchecked items receive no points.
+                  </p>
+                </div>
+                <div className="checkpoints-grid">
+                  {MANUAL_CHECKPOINTS.map((checkpoint) => (
+                    <label key={checkpoint.id} className="checkpoint-item">
+                      <input
+                        type="checkbox"
+                        checked={manualChecks[checkpoint.id]}
+                        onChange={(event) => {
+                          setManualChecks((current) => ({ ...current, [checkpoint.id]: event.target.checked }));
+                          setHasCalculated(false);
+                          setAuditResults(null);
+                        }}
+                        className="checkpoint-checkbox"
+                      />
+                      <span>{checkpoint.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                      <div className="space-y-1 sm:text-right">
-                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${auditResults.ratingBadge.bg} ${auditResults.ratingBadge.text}`}>
-                          {auditResults.ratingBadge.label}
-                        </span>
-                        <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                          Evaluated against {rules.length} active 2027 rules
-                        </p>
-                      </div>
+            {auditStep === 'content' && (
+              <div className="section-card">
+                <h3 className="section-heading">
+                  <Mail className="icon-sm" />
+                  <span>Email Content &amp; Headers</span>
+                </h3>
+
+                <div className="form-field">
+                  <div className="form-field-header">
+                    <label className="form-label">Briefed Subject Line</label>
+                    <span className={subjectLine.length > 65 ? 'char-counter-alert' : 'char-counter'}>
+                      {subjectLine.length} chars (optimal 20–65)
+                    </span>
+                  </div>
+                  <input type="text" placeholder="e.g. Discover what’s new this season" value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} className="form-input" />
+                </div>
+
+                <div className="form-field">
+                  <div className="form-field-header">
+                    <label className="form-label">Briefed Pre-Header (Preview Text)</label>
+                    <span className={preHeader.length < 20 && preHeader.length > 0 ? 'char-counter-alert' : 'char-counter'}>
+                      {preHeader.length} chars
+                    </span>
+                  </div>
+                  <input type="text" placeholder="e.g. Explore the latest updates and find your next step." value={preHeader} onChange={(e) => setPreHeader(e.target.value)} className="form-input" />
+                </div>
+
+                <div className="form-field">
+                  <label className="form-label">Full Email Copy (Live Text or HTML)</label>
+                  <textarea rows={10} placeholder="Paste complete message body text or HTML code here..." value={emailCopy} onChange={(e) => setEmailCopy(e.target.value)} className="form-textarea" />
+                </div>
+                <div className="cta-submit-wrap">
+                  <button type="button" onClick={handleCalculateScore} className="btn-generate-score">
+                    <Zap className="zap-icon" />
+                    <span>Generate Readiness Score</span>
+                  </button>
+                  <p className="cta-submit-note">
+                    Scores and AI inbox simulations are calculated strictly upon clicking this CTA.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {hasCalculated && auditResults && (
+              <div className="section-card">
+                <div className="scorecard-header">
+                  <div>
+                    <span className="scorecard-eyebrow">Tilte Readiness Scorecard</span>
+                    <div className="scorecard-value-row">
+                      <span className="scorecard-number">{auditResults.score}</span>
+                      <span className="scorecard-max">/100</span>
                     </div>
+                  </div>
 
-                    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                      <div className="flex items-center justify-between lg:col-span-3">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Pillar Breakdown</h4>
-                        <span className="text-[10px] text-[#80949B]">All 15 criteria evaluated across 3 strategic pillars</span>
-                      </div>
+                  <div className="scorecard-meta">
+                    <span className={`rating-badge ${auditResults.ratingBadge.badgeClass}`}>
+                      {auditResults.ratingBadge.label}
+                    </span>
+                    <p className="scorecard-subtext">
+                      Evaluated against {rules.length} active 2027 rules
+                    </p>
+                  </div>
+                </div>
 
-                      {[
-                        { index: 1, name: '01 / The Science of Getting In', icon: ShieldCheck },
-                        { index: 2, name: '02 / The Art of Standing Out', icon: Smartphone },
-                        { index: 3, name: '03 / The Intelligence Behind Results', icon: Cpu },
-                      ].map((pillar) => {
-                        const pillarRules = auditResults.evaluatedRules.filter((r) => r.pillarIndex === pillar.index);
-                        const pillarEarned = pillarRules.reduce((acc, r) => acc + r.earned, 0);
-                        const pillarMax = pillarRules.reduce((acc, r) => acc + r.weight, 0);
-                        const IconComponent = pillar.icon;
+                <div className="pillars-header">
+                  <h4 className="pillars-title">Pillar Breakdown</h4>
+                  <span className="pillars-subtitle">All 15 criteria evaluated across 3 strategic pillars</span>
+                </div>
 
-                        return (
-                          <div key={pillar.index} className={`rounded-xl border-0 p-4 transition-all space-y-3.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                            <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
-                              <div className="flex items-center space-x-2.5">
-                                <div className={`rounded-lg p-1.5 ${darkMode ? 'bg-[#072E3D] text-[#BFC9CE]' : 'bg-white text-slate-700 shadow-xs'}`}>
-                                  <IconComponent className="h-4 w-4" />
-                                </div>
+                <div className="pillars-grid">
+                  {[
+                    { index: 1, name: '01 / The Science of Getting In', icon: ShieldCheck },
+                    { index: 2, name: '02 / The Art of Standing Out', icon: Smartphone },
+                    { index: 3, name: '03 / The Intelligence Behind Results', icon: Cpu },
+                  ].map((pillar) => {
+                    const pillarRules = auditResults.evaluatedRules.filter((r) => r.pillarIndex === pillar.index);
+                    const pillarEarned = pillarRules.reduce((acc, r) => acc + r.earned, 0);
+                    const pillarMax = pillarRules.reduce((acc, r) => acc + r.weight, 0);
+                    const IconComponent = pillar.icon;
+
+                    return (
+                      <div key={pillar.index} className="pillar-card">
+                        <div className="pillar-card-header">
+                          <div className="pillar-title-group">
+                            <div className="pillar-icon-box">
+                              <IconComponent className="icon-sm" />
+                            </div>
+                            <div>
+                              <span className="pillar-name">{pillar.name}</span>
+                              <span className="pillar-count">
+                                {pillarRules.length} criteria evaluated
+                              </span>
+                            </div>
+                          </div>
+
+                          <span className="pillar-points-badge">
+                            {pillarEarned} / {pillarMax} pts
+                          </span>
+                        </div>
+
+                        <div className="pillar-rules-list">
+                          {pillarRules.map((rule) => (
+                            <div key={rule.id} className="rule-eval-card">
+                              <div className="rule-eval-left">
+                                <span className="rule-eval-status">
+                                  {rule.status === 'pass' && <CheckCircle2 className="icon-xs status-pass" />}
+                                  {rule.status === 'warning' && <AlertTriangle className="icon-xs status-warning" />}
+                                  {rule.status === 'alert' && <AlertOctagon className="icon-xs status-alert" />}
+                                </span>
                                 <div>
-                                  <span className="block text-xs font-bold">{pillar.name}</span>
-                                  <span className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                                    {pillarRules.length} criteria evaluated
-                                  </span>
+                                  <p className="rule-eval-title">{rule.code}. {rule.title}</p>
+                                  <p className="rule-eval-reason">{rule.reason}</p>
                                 </div>
                               </div>
 
-                              <div className="flex items-center space-x-2">
-                                <span className="rounded-md bg-[#405E69]/20 px-2 py-0.5 text-xs font-black text-[#405E69] dark:text-[#BFC9CE]">
-                                  {pillarEarned} / {pillarMax} pts
+                              <div className="rule-eval-score">
+                                <span className={rule.status === 'pass' ? 'status-pass' : rule.status === 'warning' ? 'status-warning' : 'status-alert'}>
+                                  {rule.earned}/{rule.weight}
                                 </span>
                               </div>
                             </div>
-
-                            <div className="space-y-2">
-                              {pillarRules.map((rule) => (
-                                <div key={rule.id} className={`flex flex-col justify-between gap-2 rounded-lg border-0 p-3 text-xs sm:flex-row sm:items-center ${darkMode ? 'bg-[#072E3D]' : 'bg-white shadow-xs'}`}>
-                                  <div className="flex items-start space-x-2">
-                                    <span className="mt-0.5 shrink-0">
-                                      {rule.status === 'pass' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
-                                      {rule.status === 'warning' && <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />}
-                                      {rule.status === 'alert' && <AlertOctagon className="h-3.5 w-3.5 text-[#FF002D]" />}
-                                    </span>
-                                    <div>
-                                      <p className="text-xs font-semibold leading-snug">{rule.code}. {rule.title}</p>
-                                      <p className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{rule.reason}</p>
-                                    </div>
-                                  </div>
-
-                                  <div className="shrink-0 text-right">
-                                    <span className={`font-mono text-xs font-bold ${rule.status === 'pass' ? 'text-emerald-500' : rule.status === 'warning' ? 'text-amber-500' : 'text-[#FF002D]'}`}>
-                                      {rule.earned}/{rule.weight}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-              <div className="flex flex-col justify-between gap-3 border-b border-black/5 dark:border-white/5 pb-4 md:flex-row md:items-center">
-                <div className="flex items-center space-x-2.5">
-                  <div className="rounded-xl border-0 bg-[#4D1B34] p-2.5 text-white shadow-xs">
-                    <Cpu className="h-5 w-5 text-amber-300" />
+            <div className="section-card">
+              <div className="sim-header">
+                <div className="sim-title-group">
+                  <div className="sim-icon-box">
+                    <Cpu className="icon-md" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold uppercase tracking-wider">Simulated AI Inbox Output & Summaries</h3>
-                    <p className={`text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                    <h3 className="sim-heading">Simulated AI Inbox Output &amp; Summaries</h3>
+                    <p className="section-desc">
                       Side-by-side behavioral modeling across current generation AI inboxes.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2 rounded-lg border-0 bg-[#741532]/20 px-3 py-1.5 text-[11px] text-[#BFC9CE]">
-                  <Info className="h-3.5 w-3.5 shrink-0 text-[#FF002D]" />
+                <div className="sim-disclaimer">
+                  <Info className="icon-xs status-alert" />
                   <span>
                     <strong>Disclaimer:</strong> Rough approximations based on observed LLM behavior (Apple Intelligence, Gemini, Outlook Copilot). Not guaranteed inbox placements.
                   </span>
@@ -1530,97 +1511,97 @@ export default function App() {
               </div>
 
               {hasCalculated && auditResults ? (
-                <div className="grid grid-cols-1 gap-4 pt-2 md:grid-cols-3">
+                <div className="sim-grid">
                   {/* ── Apple Mail ── */}
-                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border-0 p-4.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2">
-                        <span className="text-xs font-bold text-slate-800 dark:text-white">Apple Mail (Apple Intelligence)</span>
-                        <span className={`rounded px-2 py-0.5 font-mono text-[10px] ${darkMode ? 'bg-[#072E3D] text-[#BFC9CE]' : 'bg-white text-slate-600 shadow-xs'}`}>Notification Card</span>
+                  <div className="sim-card">
+                    <div className="sim-card-top">
+                      <div className="sim-card-header">
+                        <span className="sim-provider-apple">Apple Mail (Apple Intelligence)</span>
+                        <span className="sim-badge sim-badge-apple">Notification Card</span>
                       </div>
                       {simulationsLoading ? (
-                        <div className="flex items-center space-x-2 py-2">
-                          <svg className="h-3.5 w-3.5 animate-spin text-slate-400" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        <div className="sim-loading">
+                          <svg className="sim-spinner" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
+                            <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" opacity="0.75" />
                           </svg>
-                          <span className="text-[11px] text-slate-400 italic">Apple Intelligence is summarising…</span>
+                          <span>Apple Intelligence is summarising…</span>
                         </div>
                       ) : (
-                        <p className="text-xs italic leading-relaxed">"{auditResults.simulations?.apple}"</p>
+                        <p className="sim-quote">&ldquo;{auditResults.simulations?.apple}&rdquo;</p>
                       )}
                     </div>
-                    <div className={`border-t border-black/5 dark:border-white/5 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Extracted Deadline: <strong className="text-slate-900 dark:text-slate-200">{auditResults.simulations?.extractedDate ?? '—'}</strong>
+                    <div className="sim-card-footer">
+                      Extracted Deadline: <strong>{auditResults.simulations?.extractedDate ?? '—'}</strong>
                     </div>
                   </div>
 
                   {/* ── Gmail / Gemini ── */}
-                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border-0 p-4.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2">
-                        <span className="text-xs font-bold text-blue-600 dark:text-blue-400">Gmail with Gemini</span>
-                        <span className={`rounded px-2 py-0.5 font-mono text-[10px] ${darkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-800'}`}>Top-of-Thread</span>
+                  <div className="sim-card">
+                    <div className="sim-card-top">
+                      <div className="sim-card-header">
+                        <span className="sim-provider-gmail">Gmail with Gemini</span>
+                        <span className="sim-badge sim-badge-gmail">Top-of-Thread</span>
                       </div>
                       {simulationsLoading ? (
-                        <div className="flex items-center space-x-2 py-2">
-                          <svg className="h-3.5 w-3.5 animate-spin text-blue-400" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        <div className="sim-loading">
+                          <svg className="sim-spinner" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
+                            <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" opacity="0.75" />
                           </svg>
-                          <span className="text-[11px] text-blue-400 italic">Gemini is generating highlights…</span>
+                          <span>Gemini is generating highlights…</span>
                         </div>
                       ) : (
-                        <ul className="space-y-1.5 text-xs">
+                        <ul className="sim-bullets">
                           {(auditResults.simulations?.gemini ?? []).map((b, i) => (
-                            <li key={i} className="flex items-start space-x-1.5">
-                              <span className="font-bold text-blue-500 dark:text-blue-400">•</span>
-                              <span className="leading-snug">{b}</span>
+                            <li key={i} className="sim-bullet-item">
+                              <span className="sim-bullet-dot">•</span>
+                              <span>{b}</span>
                             </li>
                           ))}
                         </ul>
                       )}
                     </div>
-                    <div className={`border-t border-black/5 dark:border-white/5 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Detected Amount: <strong className="text-slate-900 dark:text-slate-200">{auditResults.simulations?.extractedAmount ?? '—'}</strong>
+                    <div className="sim-card-footer">
+                      Detected Amount: <strong>{auditResults.simulations?.extractedAmount ?? '—'}</strong>
                     </div>
                   </div>
 
                   {/* ── Outlook Copilot ── */}
-                  <div className={`flex flex-col justify-between space-y-3 rounded-xl border-0 p-4.5 ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-2">
-                        <span className="text-xs font-bold text-purple-600 dark:text-purple-400">Outlook Copilot</span>
-                        <span className={`rounded px-2 py-0.5 font-mono text-[10px] ${darkMode ? 'bg-purple-900/40 text-purple-300' : 'bg-purple-100 text-purple-800'}`}>Summary Card</span>
+                  <div className="sim-card">
+                    <div className="sim-card-top">
+                      <div className="sim-card-header">
+                        <span className="sim-provider-outlook">Outlook Copilot</span>
+                        <span className="sim-badge sim-badge-outlook">Summary Card</span>
                       </div>
                       {simulationsLoading ? (
-                        <div className="flex items-center space-x-2 py-2">
-                          <svg className="h-3.5 w-3.5 animate-spin text-purple-400" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                        <div className="sim-loading">
+                          <svg className="sim-spinner" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
+                            <path fill="currentColor" d="M4 12a8 8 0 018-8v8z" opacity="0.75" />
                           </svg>
-                          <span className="text-[11px] text-purple-400 italic">Copilot is drafting the summary card…</span>
+                          <span>Copilot is drafting the summary card…</span>
                         </div>
                       ) : (
-                        <p className="text-xs leading-relaxed">{auditResults.simulations?.copilot}</p>
+                        <p className="sim-prose">{auditResults.simulations?.copilot}</p>
                       )}
                     </div>
-                    <div className={`border-t border-black/5 dark:border-white/5 pt-2 text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                      Extracted CTA: <strong className="text-slate-900 dark:text-slate-200">{auditResults.simulations?.extractedCta ?? '—'}</strong>
+                    <div className="sim-card-footer">
+                      Extracted CTA: <strong>{auditResults.simulations?.extractedCta ?? '—'}</strong>
                     </div>
                   </div>
 
                   {/* ── Error / API key notice ── */}
                   {simulationsError && (
-                    <div className="md:col-span-3 flex items-start space-x-2 rounded-xl border-0 bg-amber-500/10 px-4 py-3 text-xs text-amber-500 dark:text-amber-300">
-                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <div className="sim-error-banner">
+                      <Info className="icon-xs" />
                       <span>{simulationsError}</span>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className={`rounded-xl border-0 p-8 text-center ${darkMode ? 'bg-[#002230] text-[#80949B]' : 'bg-[#F4F6F9] text-slate-400'}`}>
-                  <p className="text-xs">Simulated AI inbox extractions will populate automatically when you generate the score above.</p>
+                <div className="sim-empty-state">
+                  <p>Simulated AI inbox extractions will populate automatically when you generate the score above.</p>
                 </div>
               )}
             </div>
@@ -1628,59 +1609,59 @@ export default function App() {
         )}
 
         {activeTab === 'report' && (
-          <div className="space-y-6">
-            <div className={`flex items-center justify-between rounded-2xl border-0 p-4 print:hidden shadow-xs ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-              <div className="flex items-center space-x-3">
-                <FileText className="h-5 w-5 text-[#80949B]" />
+          <div className="tab-section">
+            <div className="report-toolbar print-hidden">
+              <div className="report-toolbar-info">
+                <FileText className="icon-md" />
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider">Client Executive Summary Report</h3>
-                  <p className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
+                  <h3 className="section-heading">Client Executive Summary Report</h3>
+                  <p className="section-desc">
                     Print-ready deliverable format. Free of commercial packages and pricing.
                   </p>
                 </div>
               </div>
 
-              <button type="button" onClick={() => window.print()} className="flex items-center space-x-2 rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532] shadow-xs">
-                <Printer className="h-4 w-4" />
+              <button type="button" onClick={() => window.print()} className="btn-print">
+                <Printer className="icon-sm" />
                 <span>Print / Save PDF</span>
               </button>
             </div>
 
-            <div className="section-card section-card-light rounded-2xl border-0 bg-white p-8 text-slate-900 shadow-xs print:border-none print:p-0 print:shadow-none sm:p-12">
-              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-6">
+            <div className="report-sheet">
+              <div className="report-header">
                 <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-2xl font-black tracking-tighter text-[#002837]">TILTE</span>
-                    <span className="rounded bg-[#002837] px-2 py-0.5 text-[11px] font-bold tracking-wide text-white">READINESS STUDIO</span>
+                  <div className="report-brand-row">
+                    <span className="report-brand-name">TILTE</span>
+                    <span className="report-brand-tag">READINESS STUDIO</span>
                   </div>
-                  <p className="mt-1 text-xs font-bold uppercase tracking-widest text-slate-500">Email Campaign Audit & AI Inbox Performance Report</p>
+                  <p className="report-subtitle">Email Campaign Audit &amp; AI Inbox Performance Report</p>
                 </div>
 
-                <div className="space-y-0.5 text-right text-xs text-slate-600">
-                  <p><strong className="text-slate-900">Client:</strong> {clientName || 'Not provided'}</p>
-                  <p><strong className="text-slate-900">Campaign:</strong> {campaignName || 'Not provided'}</p>
-                  <p><strong className="text-slate-900">Audited Date:</strong> {new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                <div className="report-meta">
+                  <p><strong>Client:</strong> {clientName || 'Not provided'}</p>
+                  <p><strong>Campaign:</strong> {campaignName || 'Not provided'}</p>
+                  <p><strong>Audited Date:</strong> {new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
                 </div>
               </div>
 
-              <div className="mt-8 grid grid-cols-1 gap-6 rounded-2xl border-0 bg-[#F4F6F9] p-6 md:grid-cols-12">
-                <div className="flex flex-col items-center justify-center border-black/5 pr-6 text-center md:col-span-4 md:border-r">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Overall Readiness Index</span>
-                  <div className="my-2 flex items-baseline space-x-1">
-                    <span className="text-6xl font-black tracking-tight text-[#002837]">{hasCalculated && auditResults ? auditResults.score : '--'}</span>
-                    <span className="text-xl font-bold text-slate-400">/100</span>
+              <div className="report-summary-box">
+                <div className="report-score-col">
+                  <span className="scorecard-eyebrow">Overall Readiness Index</span>
+                  <div className="scorecard-value-row">
+                    <span className="report-score-num">{hasCalculated && auditResults ? auditResults.score : '--'}</span>
+                    <span className="report-score-max">/100</span>
                   </div>
-                  <span className={`rounded-full px-3 py-1 text-xs font-bold text-white ${hasCalculated && auditResults ? auditResults.ratingBadge.bg : 'bg-slate-200'}`}>
+                  <span className={`rating-badge ${hasCalculated && auditResults ? auditResults.ratingBadge.badgeClass : 'rating-badge-pending'}`}>
                     {hasCalculated && auditResults ? auditResults.ratingBadge.label : 'Pending Evaluation'}
                   </span>
                 </div>
 
-                <div className="space-y-3 md:col-span-8">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">Executive Evaluation Context</h4>
-                  <p className="text-xs leading-relaxed text-slate-700">
+                <div className="report-context-col">
+                  <h4 className="report-context-title">Executive Evaluation Context</h4>
+                  <p className="report-context-text">
                     This email was systematically tested against the 15 pillars of the 2027 Email Best Practices. With modern inboxes deploying automatic LLM summarizers, live-text clarity, clear deadlines, and single-intent actions are critical to prevent customer drop-off before opening.
                   </p>
-                  <div className="flex items-center space-x-4 pt-2 text-xs font-semibold text-slate-600">
+                  <div className="report-targets-row">
                     <span>Target Goal: {coreGoal || 'Not provided'}</span>
                     <span>•</span>
                     <span>Audience: {targetAudience || 'Not provided'}</span>
@@ -1688,25 +1669,25 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mt-8 space-y-3">
-                <h3 className="border-b border-black/5 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">Observed AI Inbox Extract Simulations</h3>
-                <p className="text-[11px] italic text-slate-500">Note: Inbox summaries are estimated based on observed LLM behavior (Apple Intelligence, Gemini, Outlook Copilot).</p>
+              <div className="report-section">
+                <h3 className="report-section-title">Observed AI Inbox Extract Simulations</h3>
+                <p className="report-note">Note: Inbox summaries are estimated based on observed LLM behavior (Apple Intelligence, Gemini, Outlook Copilot).</p>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <div className="space-y-1 rounded-xl border-0 bg-[#F4F6F9] p-4">
-                    <strong className="block text-xs font-bold text-slate-900">Apple Mail Summary</strong>
+                <div className="report-sim-grid">
+                  <div className="report-sim-box">
+                    <strong>Apple Mail Summary</strong>
                     {simulationsLoading ? (
-                      <p className="text-xs italic text-slate-400">Generating…</p>
+                      <p className="report-note">Generating…</p>
                     ) : (
-                      <p className="text-xs text-slate-700 italic">"{hasCalculated && auditResults ? auditResults.simulations?.apple : 'Pending generation.'}"</p>
+                      <p className="sim-quote">&ldquo;{hasCalculated && auditResults ? auditResults.simulations?.apple : 'Pending generation.'}&rdquo;</p>
                     )}
                   </div>
 
-                  <div className="space-y-1 rounded-xl border-0 bg-[#F4F6F9] p-4">
-                    <strong className="block text-xs font-bold text-slate-900">Gmail Gemini Highlights</strong>
-                    <ul className="space-y-1 text-xs text-slate-700">
+                  <div className="report-sim-box">
+                    <strong>Gmail Gemini Highlights</strong>
+                    <ul className="report-sim-list">
                       {simulationsLoading ? (
-                        <li className="italic text-slate-400">Generating…</li>
+                        <li className="report-note">Generating…</li>
                       ) : hasCalculated && auditResults ? (
                         auditResults.simulations?.gemini.map((b, i) => <li key={i}>• {b}</li>)
                       ) : (
@@ -1715,31 +1696,31 @@ export default function App() {
                     </ul>
                   </div>
 
-                  <div className="space-y-1 rounded-xl border-0 bg-[#F4F6F9] p-4">
-                    <strong className="block text-xs font-bold text-slate-900">Outlook Copilot Card</strong>
+                  <div className="report-sim-box">
+                    <strong>Outlook Copilot Card</strong>
                     {simulationsLoading ? (
-                      <p className="text-xs italic text-slate-400">Generating…</p>
+                      <p className="report-note">Generating…</p>
                     ) : (
-                      <p className="text-xs text-slate-700">{hasCalculated && auditResults ? auditResults.simulations?.copilot : 'Pending generation.'}</p>
+                      <p className="sim-prose">{hasCalculated && auditResults ? auditResults.simulations?.copilot : 'Pending generation.'}</p>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="mt-8 space-y-3">
-                <h3 className="border-b border-black/5 pb-2 text-xs font-bold uppercase tracking-wider text-slate-900">Submitted Subject & Copy Breakdown</h3>
+              <div className="report-section">
+                <h3 className="report-section-title">Submitted Subject &amp; Copy Breakdown</h3>
 
-                <div className="space-y-2 rounded-xl border-0 bg-[#F4F6F9] p-4 text-xs">
+                <div className="report-copy-box">
                   <p><strong>Subject:</strong> {subjectLine || 'N/A'}</p>
                   <p><strong>Pre-Header:</strong> {preHeader || 'N/A'}</p>
-                  <div className="border-t border-black/5 pt-2">
-                    <strong className="mb-1 block">Body Text Content:</strong>
-                    <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-slate-700">{emailCopy || 'No copy provided.'}</pre>
+                  <div className="report-copy-body">
+                    <strong>Body Text Content:</strong>
+                    <pre className="report-pre">{emailCopy || 'No copy provided.'}</pre>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-8 flex items-center justify-between border-t border-black/5 pt-6 text-[11px] text-slate-500">
+              <div className="report-footer">
                 <span>© 2027 Tilte Email Campaign Readiness Studio. All rights reserved.</span>
                 <span>Confidential QA Deliverable</span>
               </div>
@@ -1748,109 +1729,115 @@ export default function App() {
         )}
 
         {activeTab === 'methodology' && (
-          <div className="space-y-6">
-            <div className={`section-card flex flex-col justify-between gap-4 rounded-2xl border-0 p-6 shadow-xs md:flex-row md:items-center ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-              <div>
-                <div className="flex items-center space-x-2">
-                  <BookOpen className="h-5 w-5 text-[#80949B]" />
-                  <h2 className="text-lg font-black tracking-tight">Current Methodologies & Knowledge Base</h2>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${userRole === 'admin' ? 'bg-[#741532]/40 text-rose-300' : 'bg-[#405E69]/30 text-[#BFC9CE]'}`}>
-                    {userRole === 'admin' ? 'Editing Enabled' : 'View Only'}
-                  </span>
-                </div>
-                <p className={`mt-0.5 text-xs ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
-                  NotebookLM-style split workspace. Global methodology updates are synchronized in Firestore.
-                </p>
-              </div>
-
-              <div className="flex items-center space-x-2 self-start md:self-auto">
-                {userRole === 'admin' ? (
-                  <>
-                    <button type="button" onClick={handleResetToDefaultMethodology} title="Reset rules to 2027 baseline" className={`rounded-xl border-0 p-2 text-xs font-semibold transition-all ${darkMode ? 'bg-[#002230] text-[#80949B] hover:text-white' : 'bg-[#F4F6F9] text-slate-600 hover:text-slate-900 shadow-xs'}`}>
-                      <RotateCcw className="h-4 w-4" />
-                    </button>
-
-                    <button type="button" onClick={() => setIsAddRuleModalOpen(true)} className="flex items-center space-x-2 rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532] shadow-xs">
-                      <Plus className="h-4 w-4" />
-                      <span>Add Methodology Rule</span>
-                    </button>
-                  </>
-                ) : (
-                  <div className="flex items-center space-x-1.5 rounded-lg border-0 bg-[#002230] px-3 py-1.5 text-xs text-[#80949B]">
-                    <Lock className="h-3.5 w-3.5" />
-                    <span>Editing access is limited to approved administrators</span>
+          <div className="tab-section">
+            <div className="section-card">
+              <div className="methodology-header">
+                <div>
+                  <div className="methodology-title-row">
+                    <BookOpen className="icon-md" />
+                    <h2 className="methodology-heading">Current Methodologies &amp; Knowledge Base</h2>
+                    <span className={`role-badge ${userRole === 'admin' ? 'role-badge-admin' : 'role-badge-viewer'}`}>
+                      {userRole === 'admin' ? 'Editing Enabled' : 'View Only'}
+                    </span>
                   </div>
-                )}
+                  <p className="section-desc">
+                    NotebookLM-style split workspace. Global methodology updates are synchronized in Firestore.
+                  </p>
+                </div>
+
+                <div className="methodology-actions">
+                  {userRole === 'admin' ? (
+                    <>
+                      <button type="button" onClick={handleResetToDefaultMethodology} title="Reset rules to 2027 baseline" className="icon-btn">
+                        <RotateCcw className="icon-sm" />
+                      </button>
+
+                      <button type="button" onClick={() => setIsAddRuleModalOpen(true)} className="btn-print">
+                        <Plus className="icon-sm" />
+                        <span>Add Methodology Rule</span>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="readonly-notice">
+                      <Lock className="icon-xs" />
+                      <span>Editing access is limited to approved administrators</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
             {(isSavingMethodology || methodologyStatusMsg) && (
-              <div className="flex items-center space-x-2 rounded-xl border-0 bg-emerald-500/10 p-3 text-xs font-semibold text-emerald-400">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <div className="save-banner">
+                <CheckCircle2 className="icon-sm" />
                 <span>{methodologyStatusMsg || 'Saving methodology...'}</span>
               </div>
             )}
 
-            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
-              <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-4 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
-                  <h3 className="flex items-center space-x-1.5 text-xs font-bold uppercase tracking-wider text-[#80949B]">
-                    <FileText className="h-4 w-4" />
+            <div className="methodology-grid">
+              <div className="section-card sources-col">
+                <div className="col-header">
+                  <h3 className="section-heading">
+                    <FileText className="icon-sm" />
                     <span>Grounding Sources ({sources.length})</span>
                   </h3>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="sources-list">
                   {sources.map((src) => (
-                    <div key={src.id} onClick={() => setSelectedSource(src)} className={`cursor-pointer rounded-xl border-0 p-3.5 text-xs transition-all ${selectedSource.id === src.id ? darkMode ? 'bg-[#002230] ring-2 ring-[#405E69]' : 'bg-white shadow-xs ring-2 ring-[#405E69]/40' : darkMode ? 'bg-[#002230] hover:bg-[#002837]' : 'bg-[#F4F6F9] hover:bg-[#E9EDF2]'}`}>
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="rounded bg-[#4D1B34] px-2 py-0.5 text-[10px] font-bold text-white">{src.category}</span>
-                        <span className={`text-[10px] ${darkMode ? 'text-[#80949B]' : 'text-slate-400'}`}>{src.date}</span>
+                    <div
+                      key={src.id}
+                      onClick={() => setSelectedSource(src)}
+                      className={`source-card ${selectedSource.id === src.id ? 'source-card-active' : ''}`}
+                    >
+                      <div className="source-card-top">
+                        <span className="source-category-tag">{src.category}</span>
+                        <span className="source-date">{src.date}</span>
                       </div>
-                      <h4 className="font-bold leading-tight">{src.title}</h4>
-                      <p className={`mt-1 text-[11px] leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{src.snippet}</p>
+                      <h4 className="source-title">{src.title}</h4>
+                      <p className="source-snippet">{src.snippet}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className={`space-y-2 rounded-xl border-0 p-4 text-xs ${darkMode ? 'bg-[#002230]' : 'bg-[#F4F6F9]'}`}>
-                  <span className="block text-[10px] font-bold uppercase text-[#80949B]">Selected Source Detail</span>
-                  <h4 className="font-bold">{selectedSource.title}</h4>
-                  <p className={`leading-relaxed ${darkMode ? 'text-[#80949B]' : 'text-slate-600'}`}>{selectedSource.snippet}</p>
+                <div className="source-detail-box">
+                  <span className="source-detail-eyebrow">Selected Source Detail</span>
+                  <h4 className="source-title">{selectedSource.title}</h4>
+                  <p className="source-snippet">{selectedSource.snippet}</p>
                 </div>
               </div>
 
-              <div className={`section-card space-y-4 rounded-2xl border-0 p-6 shadow-xs lg:col-span-8 ${darkMode ? 'bg-[#072E3D]' : 'bg-white'}`}>
-                <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#80949B]">Active Criteria & Scoring Weight Rules ({rules.length})</h3>
-                  <div className="flex items-center space-x-3">
-                    <span className={`text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>Total Max Weight: {rules.reduce((acc, r) => acc + r.weight, 0)} pts</span>
-                    {userRole === 'admin' && <span className="text-[10px] font-mono font-bold text-[#FF002D]">• Cloud-Synced</span>}
+              <div className="section-card rules-col">
+                <div className="col-header">
+                  <h3 className="section-heading">Active Criteria &amp; Scoring Weight Rules ({rules.length})</h3>
+                  <div className="methodology-actions">
+                    <span className="scorecard-subtext">Total Max Weight: {rules.reduce((acc, r) => acc + r.weight, 0)} pts</span>
+                    {userRole === 'admin' && <span className="cloud-sync-tag">• Cloud-Synced</span>}
                   </div>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="rules-list">
                   {rules.map((rule) => (
-                    <div key={rule.id} className={`flex items-center justify-between gap-3 rounded-xl border-0 p-3.5 text-xs transition-colors ${darkMode ? 'bg-[#002230] hover:bg-[#002837]' : 'bg-[#F4F6F9] hover:bg-[#E9EDF2]'}`}>
-                      <div className="flex items-center space-x-3">
-                        <span className="rounded bg-[#405E69] px-2 py-1 text-xs font-black text-white">{rule.code}</span>
+                    <div key={rule.id} className="methodology-rule-card">
+                      <div className="methodology-rule-left">
+                        <span className="rule-code-badge">{rule.code}</span>
                         <div>
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-bold">{rule.title}</h4>
-                            <span className="rounded-full bg-[#405E69]/30 px-2 py-0.5 text-[10px] text-[#BFC9CE]">{rule.pillar}</span>
+                          <div className="methodology-rule-title-row">
+                            <h4 className="source-title">{rule.title}</h4>
+                            <span className="rule-pillar-pill">{rule.pillar}</span>
                           </div>
-                          <p className={`mt-0.5 text-[11px] ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>{rule.desc}</p>
+                          <p className="source-snippet">{rule.desc}</p>
                         </div>
                       </div>
 
-                      <div className="flex shrink-0 items-center space-x-3">
-                        <span className="rounded bg-[#741532]/30 px-2 py-1 font-mono text-xs font-bold text-[#BFC9CE]">{rule.weight} pts</span>
+                      <div className="methodology-rule-right">
+                        <span className="rule-weight-badge">{rule.weight} pts</span>
                         {userRole === 'admin' ? (
-                          <button type="button" onClick={() => handleDeleteRule(rule.id)} className="p-1 text-[#80949B] transition-colors hover:text-[#FF002D]" title="Remove rule (Admin)">
-                            <Trash2 className="h-4 w-4" />
+                          <button type="button" onClick={() => handleDeleteRule(rule.id)} className="btn-delete-rule" title="Remove rule (Admin)">
+                            <Trash2 className="icon-sm" />
                           </button>
                         ) : (
-                          <span title="Read-only criteria"><Lock className="h-3.5 w-3.5 text-[#80949B]" /></span>
+                          <span title="Read-only criteria"><Lock className="icon-xs" /></span>
                         )}
                       </div>
                     </div>
@@ -1860,46 +1847,46 @@ export default function App() {
             </div>
 
             {isAddRuleModalOpen && userRole === 'admin' && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-                <div className={`w-full max-w-md space-y-4 rounded-2xl border-0 p-6 shadow-2xl transition-all ${darkMode ? 'bg-[#072E3D] text-white' : 'bg-white text-slate-900'}`}>
-                  <div className="flex items-center justify-between border-b border-black/5 dark:border-white/5 pb-3">
-                    <h3 className="text-sm font-bold">Add Custom Methodology Rule (Admin)</h3>
-                    <button type="button" onClick={() => setIsAddRuleModalOpen(false)} className="text-slate-400 hover:text-white">
-                      <X className="h-5 w-5" />
+              <div className="modal-backdrop">
+                <div className="modal-card modal-card-md">
+                  <div className="modal-header">
+                    <h3 className="modal-title">Add Custom Methodology Rule (Admin)</h3>
+                    <button type="button" onClick={() => setIsAddRuleModalOpen(false)} className="modal-close-btn">
+                      <X className="icon-md" />
                     </button>
                   </div>
 
-                  <form onSubmit={handleAddRule} className="space-y-3 text-xs">
-                    <div>
-                      <label className="mb-1 block font-medium">Pillar Group</label>
-                      <select value={newRule.pillarIndex} onChange={(e) => setNewRule({ ...newRule, pillarIndex: Number(e.target.value) })} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white' : 'bg-[#F4F6F9] text-slate-900'}`}>
+                  <form onSubmit={handleAddRule} className="modal-form">
+                    <div className="form-field">
+                      <label className="form-label">Pillar Group</label>
+                      <select value={newRule.pillarIndex} onChange={(e) => setNewRule({ ...newRule, pillarIndex: Number(e.target.value) })} className="form-select">
                         <option value={1}>01 / The Science of Getting In</option>
                         <option value={2}>02 / The Art of Standing Out</option>
                         <option value={3}>03 / The Intelligence Behind Results</option>
                       </select>
                     </div>
 
-                    <div>
-                      <label className="mb-1 block font-medium">Rule Title</label>
-                      <input type="text" placeholder="e.g. BIMI SVG Logo Compliance" value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white' : 'bg-[#F4F6F9] text-slate-900'}`} required />
+                    <div className="form-field">
+                      <label className="form-label">Rule Title</label>
+                      <input type="text" placeholder="e.g. BIMI SVG Logo Compliance" value={newRule.title} onChange={(e) => setNewRule({ ...newRule, title: e.target.value })} className="form-input" required />
                     </div>
 
-                    <div>
-                      <label className="mb-1 block font-medium">Description</label>
-                      <textarea rows={2} placeholder="Explain evaluation criteria..." value={newRule.desc} onChange={(e) => setNewRule({ ...newRule, desc: e.target.value })} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white' : 'bg-[#F4F6F9] text-slate-900'}`} />
+                    <div className="form-field">
+                      <label className="form-label">Description</label>
+                      <textarea rows={2} placeholder="Explain evaluation criteria..." value={newRule.desc} onChange={(e) => setNewRule({ ...newRule, desc: e.target.value })} className="form-textarea" />
                     </div>
 
-                    <div>
-                      <label className="mb-1 block font-medium">Score Weight Points</label>
-                      <input type="number" min="1" max="20" value={newRule.weight} onChange={(e) => setNewRule({ ...newRule, weight: e.target.value })} className={`w-full rounded-xl border-0 p-3 focus:outline-none focus:ring-2 focus:ring-[#405E69]/30 ${darkMode ? 'bg-[#002230] text-white' : 'bg-[#F4F6F9] text-slate-900'}`} />
+                    <div className="form-field">
+                      <label className="form-label">Score Weight Points</label>
+                      <input type="number" min="1" max="20" value={newRule.weight} onChange={(e) => setNewRule({ ...newRule, weight: e.target.value })} className="form-input" />
                     </div>
 
-                    <div className="flex justify-end space-x-2 pt-2">
-                      <button type="button" onClick={() => setIsAddRuleModalOpen(false)} className={`rounded-xl px-4 py-2 text-xs font-semibold ${darkMode ? 'bg-[#002230] text-slate-300' : 'bg-slate-100 text-slate-700'}`}>
+                    <div className="modal-actions">
+                      <button type="button" onClick={() => setIsAddRuleModalOpen(false)} className="btn-cancel">
                         Cancel
                       </button>
-                      <button type="submit" className="rounded-xl bg-[#405E69] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-[#741532] shadow-xs">
-                        Save & Sync Rule
+                      <button type="submit" className="btn-save-rule">
+                        Save &amp; Sync Rule
                       </button>
                     </div>
                   </form>
@@ -1910,7 +1897,7 @@ export default function App() {
         )}
 
         {activeTab === 'design' && (
-          <CreativeScanner darkMode={darkMode} />
+          <CreativeScanner />
         )}
       </main>
     </div>

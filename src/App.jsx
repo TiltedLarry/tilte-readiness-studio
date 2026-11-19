@@ -1127,15 +1127,14 @@ export default function App() {
   return (
     <div className={`min-h-screen font-sans transition-colors duration-200 ${darkMode ? 'bg-[#001D27] text-slate-100' : 'bg-[#EEF1F6] text-slate-900'}`}>
       <header className={`sticky top-0 z-40 backdrop-blur-md transition-colors ${darkMode ? 'bg-[#001D27]/90 text-slate-100 border-b border-white/5' : 'bg-white/90 text-slate-900 border-b border-slate-200/40 shadow-xs'}`}>
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center space-x-3">
+        <div className="mx-auto grid h-16 max-w-7xl grid-cols-[1fr_auto_1fr] items-center px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center space-x-3 justify-self-start">
             <div>
               <img class="platform-logo" rel="logo" type="image/png" src="public/dark_switch_logo.png"/>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <nav className={`flex rounded-xl p-1 text-xs font-semibold sm:text-sm ${darkMode ? 'bg-[#062D3C]' : 'bg-[#E2E7EE]'}`}>
+          <nav className={`justify-self-center flex rounded-xl p-1 text-xs font-semibold sm:text-sm ${darkMode ? 'bg-[#062D3C]' : 'bg-[#E2E7EE]'}`}>
               <button
                 type="button"
                 onClick={() => setActiveTab('studio')}
@@ -1174,9 +1173,9 @@ export default function App() {
                 <Sparkles className="h-3.5 w-3.5" />
                 <span>Design Review</span>
               </button>
-            </nav>
+          </nav>
 
-            <div className="flex items-center space-x-2 pl-1">
+          <div className="flex items-center space-x-2 justify-self-end pl-1">
               {user && !user.isAnonymous ? (
                 <div className="flex items-center space-x-1.5">
                   <span className={`hidden max-w-[110px] truncate text-[11px] md:inline ${darkMode ? 'text-[#80949B]' : 'text-slate-500'}`}>
@@ -1193,7 +1192,6 @@ export default function App() {
               )}
 
 
-            </div>
           </div>
         </div>
       </header>

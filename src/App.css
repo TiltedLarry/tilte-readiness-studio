@@ -44,39 +44,11 @@
   gap: 0.75rem;
 }
 
-.brand-logo {
-  width: 2.25rem;
+.platform-logo {
   height: 2.25rem;
-  border-radius: 0.75rem;
-  background-color: var(--tilte-plum);
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  font-weight: 900;
-  letter-spacing: -0.05em;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-}
-
-.brand-title {
-  font-size: 1.125rem;
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
-}
-
-.brand-subtitle {
-  display: none;
-  margin: 0;
-  font-size: 0.6875rem;
-  color: var(--text-muted);
-}
-
-@media (min-width: 640px) {
-  .brand-subtitle {
-    display: block;
-  }
+  width: auto;
+  display: block;
+  object-fit: contain;
 }
 
 .header-actions {

@@ -31,8 +31,6 @@ import {
   Plus,
   Trash2,
   Info,
-  Sun,
-  Moon,
   ShieldCheck,
   Smartphone,
   X,
@@ -737,7 +735,6 @@ ${emailCopy}`;
 // ───────────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [darkMode, setDarkMode] = useState(true);
   const [activeTab, setActiveTab] = useState('studio');
   const [auditStep, setAuditStep] = useState('metadata');
   const [user, setUser] = useState(null);
@@ -995,10 +992,6 @@ export default function App() {
     setUserRole('campaign_manager');
   };
 
-  const toggleTheme = () => {
-    setDarkMode((current) => !current);
-  };
-
   const handleCalculateScore = async () => {
     if (!emailCopy.trim()) {
       alert('Please add a subject line and email copy before running the audit.');
@@ -1121,19 +1114,15 @@ export default function App() {
   };
 
   return (
-    <div className={`app-shell ${darkMode ? 'theme-dark' : 'theme-light'}`}>
+    <div className="app-shell theme-dark">
       <header className="app-header">
         <div className="app-header-inner">
           <div className="brand-group">
-            <div className="brand-logo">
-              <span>T</span>
-            </div>
-            <div>
-              <span className="brand-title">Tilte</span>
-              <p className="brand-subtitle">
-                Email Campaign Readiness Studio
-              </p>
-            </div>
+            <img
+              className="platform-logo"
+              alt="Tilte Email Campaign Readiness Studio"
+              src={`${import.meta.env.BASE_URL}dark_switch_logo.png`}
+            />
           </div>
 
           <div className="header-actions">
@@ -1193,15 +1182,6 @@ export default function App() {
                   Sign In
                 </button>
               )}
-
-              <button
-                type="button"
-                aria-label="Toggle theme"
-                onClick={toggleTheme}
-                className="theme-toggle-btn"
-              >
-                {darkMode ? <Sun className="icon-sm" /> : <Moon className="icon-sm" />}
-              </button>
             </div>
           </div>
         </div>

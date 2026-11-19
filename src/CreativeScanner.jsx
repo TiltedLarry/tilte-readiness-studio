@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, CheckCircle2, AlertCircle, X, Sparkles } from 'lucide-react';
+import './CreativeScanner.css';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-export default function CreativeScanner({ darkMode = false }) {
+export default function CreativeScanner() {
   // Image State
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -189,14 +190,14 @@ export default function CreativeScanner({ darkMode = false }) {
   };
 
   return (
-    <div className="mx-auto max-w-7xl py-2">
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+    <div className="scanner-container">
+      <div className="scanner-grid">
         {/* LEFT COLUMN: UPLOADS & ACTION BUTTON */}
-        <div className="space-y-6">
+        <div className="scanner-left-col">
           {/* STEP 1: EMAIL IMAGE UPLOAD & SIMPLE PREVIEW */}
-          <div className={`rounded-xl border p-5 shadow-sm transition-colors ${darkMode ? 'border-[#405E69]/40 bg-[#072E3D]' : 'border-gray-200 bg-white'}`}>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className={`text-base font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>1. Upload Email Design Image</h2>
+          <div className="scanner-card">
+            <div className="scanner-card-header">
+              <h2 className="scanner-card-title">1. Upload Email Design Image</h2>
               {imagePreview && (
                 <button
                   type="button"
@@ -205,9 +206,9 @@ export default function CreativeScanner({ darkMode = false }) {
                     setImagePreview(null);
                     setResult(null);
                   }}
-                  className="flex items-center gap-1 text-xs text-red-600 hover:underline dark:text-red-400"
+                  className="btn-remove-file"
                 >
-                  <X className="h-3.5 w-3.5" /> Remove
+                  <X className="icon-xs" /> Remove
                 </button>
               )}
             </div>
@@ -231,34 +232,30 @@ export default function CreativeScanner({ darkMode = false }) {
                   e.preventDefault();
                   handleImageSelect(e.dataTransfer.files?.[0]);
                 }}
-                className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 text-center transition ${
-                  darkMode
-                    ? 'border-[#405E69]/50 bg-[#002230] hover:border-[#80949B] hover:bg-[#002b3d]'
-                    : 'border-gray-300 bg-gray-50 hover:border-blue-500 hover:bg-blue-50/40'
-                }`}
+                className="scanner-dropzone"
               >
-                <Upload className={`mb-2 h-8 w-8 ${darkMode ? 'text-[#80949B]' : 'text-gray-400'}`} />
-                <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                  Click to upload or drag & drop your image
+                <Upload className="scanner-dropzone-icon" />
+                <p className="scanner-dropzone-title">
+                  Click to upload or drag &amp; drop your image
                 </p>
-                <p className={`mt-1 text-xs ${darkMode ? 'text-[#80949B]' : 'text-gray-500'}`}>PNG, JPG, or WEBP</p>
+                <p className="scanner-dropzone-hint">PNG, JPG, or WEBP</p>
               </div>
             ) : (
-              <div className={`overflow-hidden rounded-lg border p-4 ${darkMode ? 'border-[#405E69]/40 bg-[#002230]' : 'border-gray-200 bg-gray-100'}`}>
+              <div className="scanner-preview-box">
                 <img
                   src={imagePreview}
                   alt="Uploaded email design"
-                  className="mx-auto block max-h-[28rem] w-auto max-w-full rounded object-contain shadow-sm"
+                  className="scanner-preview-img"
                 />
-                <p className={`mt-2 text-center text-xs ${darkMode ? 'text-[#80949B]' : 'text-gray-500'}`}>{imageFile?.name}</p>
+                <p className="scanner-file-caption">{imageFile?.name}</p>
               </div>
             )}
           </div>
 
           {/* STEP 2: STYLE GUIDE PDF UPLOAD */}
-          <div className={`rounded-xl border p-5 shadow-sm transition-colors ${darkMode ? 'border-[#405E69]/40 bg-[#072E3D]' : 'border-gray-200 bg-white'}`}>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className={`text-base font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>2. Upload Brand Style Guide (PDF)</h2>
+          <div className="scanner-card">
+            <div className="scanner-card-header">
+              <h2 className="scanner-card-title">2. Upload Brand Style Guide (PDF)</h2>
               {pdfFile && (
                 <button
                   type="button"
@@ -266,9 +263,9 @@ export default function CreativeScanner({ darkMode = false }) {
                     setPdfFile(null);
                     setResult(null);
                   }}
-                  className="flex items-center gap-1 text-xs text-red-600 hover:underline dark:text-red-400"
+                  className="btn-remove-file"
                 >
-                  <X className="h-3.5 w-3.5" /> Remove
+                  <X className="icon-xs" /> Remove
                 </button>
               )}
             </div>
@@ -292,27 +289,23 @@ export default function CreativeScanner({ darkMode = false }) {
                   e.preventDefault();
                   handlePdfSelect(e.dataTransfer.files?.[0]);
                 }}
-                className={`flex cursor-pointer items-center justify-center gap-3 rounded-lg border-2 border-dashed p-6 text-center transition ${
-                  darkMode
-                    ? 'border-[#405E69]/50 bg-[#002230] hover:border-[#80949B] hover:bg-[#002b3d]'
-                    : 'border-gray-300 bg-gray-50 hover:border-blue-500 hover:bg-blue-50/40'
-                }`}
+                className="scanner-dropzone scanner-dropzone-pdf"
               >
-                <FileText className={`h-6 w-6 ${darkMode ? 'text-[#80949B]' : 'text-gray-400'}`} />
-                <span className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>Select Brand Guidelines PDF</span>
+                <FileText className="scanner-dropzone-pdf-icon" />
+                <span className="scanner-dropzone-title">Select Brand Guidelines PDF</span>
               </div>
             ) : (
-              <div className={`flex items-center gap-3 rounded-lg border p-3.5 ${darkMode ? 'border-[#405E69]/40 bg-[#002230]' : 'border-gray-200 bg-gray-50'}`}>
-                <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                <span className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-800'}`}>{pdfFile.name}</span>
+              <div className="scanner-pdf-selected">
+                <FileText className="scanner-pdf-icon" />
+                <span className="scanner-pdf-name">{pdfFile.name}</span>
               </div>
             )}
           </div>
 
           {/* ERROR BANNER */}
           {error && (
-            <div className={`flex items-center gap-2 rounded-lg border p-3.5 text-sm ${darkMode ? 'border-red-900/60 bg-red-950/40 text-red-300' : 'border-red-200 bg-red-50 text-red-700'}`}>
-              <AlertCircle className="h-4 w-4 shrink-0" />
+            <div className="scanner-error-banner">
+              <AlertCircle className="icon-sm" />
               <span>{error}</span>
             </div>
           )}
@@ -322,55 +315,57 @@ export default function CreativeScanner({ darkMode = false }) {
             type="button"
             onClick={runScan}
             disabled={!imageFile || !pdfFile || isScanning}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300 dark:disabled:bg-slate-700"
+            className="btn-run-scan"
           >
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="icon-sm" />
             {isScanning ? 'Scanning Design & Checking CTA...' : 'Scan Against Style Guide'}
           </button>
         </div>
 
         {/* RIGHT COLUMN: SCAN RESULTS */}
-        <div className={`rounded-xl border p-5 shadow-sm transition-colors ${darkMode ? 'border-[#405E69]/40 bg-[#072E3D]' : 'border-gray-200 bg-white'}`}>
-          <h3 className={`mb-4 text-base font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+        <div className="scanner-card">
+          <h3 className="scanner-results-heading">
             CTA Scan &amp; Brand Guide Alignment
           </h3>
 
           {isScanning ? (
-            <div className={`flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center ${darkMode ? 'border-[#405E69]/40 bg-[#002230] text-[#80949B]' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
-              <Sparkles className="mb-3 h-8 w-8 animate-pulse text-blue-500" />
-              <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+            <div className="scanner-empty-box">
+              <Sparkles className="scanner-pulse-icon" />
+              <p className="scanner-empty-title">
                 Scanning Design &amp; Checking CTA...
               </p>
-              <p className="mt-1 text-xs">Evaluating brand style guide alignment and primary CTA clarity</p>
+              <p className="scanner-empty-desc">
+                Evaluating brand style guide alignment and primary CTA clarity
+              </p>
             </div>
           ) : result ? (
-            <div className="space-y-4">
+            <div className="scanner-results-list">
               {/* CTA Clarity Check */}
-              <div className={`rounded-lg border p-4 ${darkMode ? 'border-[#405E69]/30 bg-[#002230]' : 'border-gray-100 bg-gray-50'}`}>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              <div className="scanner-result-box">
+                <div className="scanner-result-header-between">
+                  <span className="scanner-result-title">
                     CTA Check: {result.ctaDetected ? `"${result.ctaText}"` : 'No Clear CTA Found'}
                   </span>
-                  <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                  <span className="clarity-badge">
                     Clarity: {result.ctaClarityScore}
                   </span>
                 </div>
-                <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>{result.ctaFeedback}</p>
+                <p className="scanner-feedback-text">{result.ctaFeedback}</p>
               </div>
 
               {/* Brand Style Guide Check */}
-              <div className={`rounded-lg border p-4 ${darkMode ? 'border-[#405E69]/30 bg-[#002230]' : 'border-gray-100 bg-gray-50'}`}>
-                <div className="mb-2 flex items-center gap-2">
+              <div className="scanner-result-box">
+                <div className="scanner-result-header">
                   {result.brandCompliant ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <CheckCircle2 className="icon-md status-pass" />
                   ) : (
-                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <AlertCircle className="icon-md status-warning" />
                   )}
-                  <span className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                  <span className="scanner-result-title">
                     Brand Style Guide: {result.brandCompliant ? 'Aligned' : 'Needs Adjustments'}
                   </span>
                 </div>
-                <ul className={`list-disc space-y-1 pl-6 text-sm ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                <ul className="scanner-feedback-list">
                   {(result.brandFeedback || []).map((item, idx) => (
                     <li key={idx}>{item}</li>
                   ))}
@@ -378,12 +373,12 @@ export default function CreativeScanner({ darkMode = false }) {
               </div>
             </div>
           ) : (
-            <div className={`flex flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center ${darkMode ? 'border-[#405E69]/40 bg-[#002230] text-[#80949B]' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
-              <Sparkles className="mb-3 h-8 w-8 opacity-40" />
-              <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+            <div className="scanner-empty-box">
+              <Sparkles className="scanner-empty-icon" />
+              <p className="scanner-empty-title">
                 No Scan Results Yet
               </p>
-              <p className="mt-1 max-w-sm text-xs">
+              <p className="scanner-empty-desc">
                 Upload your email design image and brand style guide PDF on the left, then click &ldquo;Scan Against Style Guide&rdquo; to view CTA clarity and brand alignment results here.
               </p>
             </div>

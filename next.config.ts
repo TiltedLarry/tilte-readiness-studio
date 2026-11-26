@@ -3,6 +3,11 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  serverExternalPackages: [
+    "firebase-admin",
+    "@google-cloud/firestore",
+    "@google-cloud/storage",
+  ],
   env: {
     NEXT_PUBLIC_FIREBASE_API_KEY:
       process.env.NEXT_PUBLIC_FIREBASE_API_KEY ??

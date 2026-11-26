@@ -59,11 +59,11 @@ export function AuthScreen() {
       <div className="lg:col-span-6 bg-gradient-to-br from-[#0B57D0] via-[#174EA6] to-[#0842A0] text-white p-8 sm:p-12 flex flex-col justify-between">
         <div className="flex items-center gap-3">
           <Image
-            src="/studio-icon.png"
+            src="/studio-icon.svg"
             alt="Tilte Email Readiness Studio"
             width={40}
             height={40}
-            className="w-10 h-10 rounded-full bg-white/10"
+            className="h-10 w-auto object-contain"
             priority
           />
           <span className="font-medium text-base tracking-tight">

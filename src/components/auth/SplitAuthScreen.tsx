@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
   updateProfile,
 } from "firebase/auth";
-import { Sparkles, Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight } from "lucide-react";
 import { auth, googleProvider } from "@/lib/firebase/client";
 
 export function SplitAuthScreen() {
@@ -72,14 +73,14 @@ export function SplitAuthScreen() {
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#0B57D0]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=1600&q=85"
+          src="/auth-hero.jpg"
           alt="Creative campaign workspace"
           className="absolute inset-0 w-full h-full object-cover opacity-85"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#001D35]/90 via-[#001D35]/35 to-transparent" />
 
         <div className="relative z-10 my-auto p-12 lg:p-16 text-white max-w-xl space-y-4">
-          <h2 className="text-3xl font-normal leading-snug tracking-tight">
+          <h2 className="text-3xl font-bold leading-snug tracking-tight">
             Ship client campaigns with confidence. Every subject line, layout,
             and brand rule verified before send.
           </h2>
@@ -94,11 +95,18 @@ export function SplitAuthScreen() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] space-y-6">
           <div className="space-y-2">
-            <div className="w-11 h-11 rounded-full bg-[#D3E3FD] text-[#0B57D0] flex items-center justify-center mb-4">
-              <Sparkles className="w-5 h-5" />
-            </div>
+            <Image
+              src="/studio-icon.svg"
+              alt="Tilte Email Readiness Studio"
+              width={44}
+              height={44}
+              className="h-11 w-auto object-contain mb-4"
+              priority
+            />
             <h1 className="text-2xl font-normal text-[#1F1F1F] tracking-tight">
-              {mode === "signin" ? "Sign in to Studio" : "Create your account"}
+              {mode === "signin"
+                ? "Sign in to Email Readiness Studio"
+                : "Create your account"}
             </h1>
             <p className="text-sm text-[#444746]">
               {mode === "signin"

@@ -98,11 +98,11 @@ export function AuthenticatedStudioApp({
       <header className="sticky top-0 z-30 h-16 px-6 flex items-center justify-between bg-[#F8FAFD]/90 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <Image
-            src="/studio-icon.png"
+            src="/studio-icon.svg"
             alt="Email Campaign Readiness Studio"
             width={36}
             height={36}
-            className="w-9 h-9 rounded-full"
+            className="h-9 w-auto object-contain"
             priority
           />
           <h1 className="font-medium text-base text-[#1F1F1F] tracking-tight">

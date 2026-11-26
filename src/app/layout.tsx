@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Tilte Email Campaign Readiness Studio",
   description: "Email campaign readiness auditing, AI inbox simulation, and brand compliance studio.",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default function RootLayout({

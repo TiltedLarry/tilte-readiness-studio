@@ -21,8 +21,8 @@ function StudioCampaignContent() {
   }, []);
 
   return (
-    <main className="h-screen flex flex-col bg-[#F8FAFD] text-[#1F1F1F]">
-      <header className="h-16 px-6 flex items-center justify-between shrink-0">
+    <main className="min-h-screen flex flex-col bg-[#F8FAFD] text-[#1F1F1F]">
+      <header className="sticky top-0 z-30 h-16 px-6 flex items-center justify-between bg-[#F8FAFD]/90 backdrop-blur-md">
         <Link
           href="/"
           className="flex items-center gap-2 text-sm font-medium text-[#444746] hover:text-[#1F1F1F]"
@@ -35,7 +35,7 @@ function StudioCampaignContent() {
         </span>
       </header>
 
-      <div className="flex-1 overflow-hidden px-4 pb-4">
+      <div className="flex-1 px-4 pb-12 max-w-[1600px] w-full mx-auto">
         <StudioWorkspace styleGuides={styleGuides} />
       </div>
     </main>

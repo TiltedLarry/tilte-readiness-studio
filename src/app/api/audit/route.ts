@@ -5,9 +5,11 @@ import { runInboxSimulation } from "@/lib/ai/inboxSimulator";
 import { runVisualAudit } from "@/lib/ai/visualAuditor";
 import {
   collections,
+  getActiveBestPractices,
   getStyleGuideById,
   saveAuditReport,
   storageBucket,
+  verifyBearerToken,
 } from "@/lib/db/firebaseAdmin";
 import { buildFinalAuditReport } from "@/lib/scoring/calculator";
 
@@ -25,6 +27,7 @@ type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 
 export async function POST(req: NextRequest) {
   try {
+    const decodedUser = await verifyBearerToken(req);
     const formData = await req.formData();
 
     // 1. Validate text inputs
@@ -62,9 +65,10 @@ export async function POST(req: NextRequest) {
     const { campaignName, styleGuideId, subjectLine, previewText, bodyCopy } =
       parsedFields.data;
 
-    // 3. Fetch Style Guide from Firestore & convert image buffer to Base64
-    const [styleGuide, arrayBuffer] = await Promise.all([
+    // 3. Fetch Style Guide, active Platform Best Practices & convert image buffer to Base64
+    const [styleGuide, activeRubric, arrayBuffer] = await Promise.all([
       getStyleGuideById(styleGuideId),
+      getActiveBestPractices(),
       imageFile.arrayBuffer(),
     ]);
 
@@ -83,6 +87,8 @@ export async function POST(req: NextRequest) {
         previewText,
         bodyCopy,
         pngStoragePath: storagePath,
+        ownerUid: decodedUser?.uid ?? null,
+        ownerEmail: decodedUser?.email ?? null,
         createdAt: new Date().toISOString(),
       }),
       fileRef.save(imageBuffer, {
@@ -92,12 +98,19 @@ export async function POST(req: NextRequest) {
 
     // 5. Run the 3 isolated Gemini Auditors in parallel (Fastest total latency)
     const [copyAudit, inboxSimulation, visualAudit] = await Promise.all([
-      runCopyAudit({ subjectLine, previewText, bodyCopy, styleGuide }),
+      runCopyAudit({
+        subjectLine,
+        previewText,
+        bodyCopy,
+        styleGuide,
+        rubric: activeRubric,
+      }),
       runInboxSimulation(subjectLine, previewText, bodyCopy),
       runVisualAudit({
         imageBase64,
         mimeType: imageFile.type as AllowedMimeType,
         styleGuide,
+        rubric: activeRubric,
       }),
     ]);
 
@@ -107,10 +120,16 @@ export async function POST(req: NextRequest) {
       copyAudit,
       visualAudit,
       inboxSimulation,
+      rubric: activeRubric,
     });
 
-    // 7. Save immutable report to Firestore
-    const reportId = await saveAuditReport(finalReport);
+    // 7. Save immutable report to Firestore with ownerUid & ownerEmail
+    const reportId = await saveAuditReport(finalReport, {
+      ownerUid: decodedUser?.uid,
+      ownerEmail: decodedUser?.email,
+      campaignName,
+      styleGuideId,
+    });
 
     return NextResponse.json(
       {

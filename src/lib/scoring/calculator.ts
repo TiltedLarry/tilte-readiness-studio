@@ -1,4 +1,7 @@
-import { EMAIL_BEST_PRACTICES_RUBRIC } from "./rubric";
+import {
+  EMAIL_BEST_PRACTICES_RUBRIC,
+  type RubricRuleDefinition,
+} from "./rubric";
 import type {
   CopyAuditOutput,
   FinalAuditReport,
@@ -12,8 +15,17 @@ export function buildFinalAuditReport(params: {
   copyAudit: CopyAuditOutput;
   visualAudit?: VisualAuditOutput | null;
   inboxSimulation: InboxSimulationOutput;
+  rubric?: RubricRuleDefinition[];
 }): FinalAuditReport {
-  const { campaignId, copyAudit, visualAudit, inboxSimulation } = params;
+  const {
+    campaignId,
+    copyAudit,
+    visualAudit,
+    inboxSimulation,
+    rubric = EMAIL_BEST_PRACTICES_RUBRIC,
+  } = params;
+
+  const activeRules = rubric.filter((r) => r.enabled !== false);
 
   const copyMap = new Map<string, RuleEvaluation>(
     copyAudit.evaluations.map((ev) => [ev.ruleId, ev])
@@ -25,7 +37,7 @@ export function buildFinalAuditReport(params: {
   let blockerFailed = false;
   let criticalFailed = false;
 
-  const evaluations = EMAIL_BEST_PRACTICES_RUBRIC.map((rule) => {
+  const evaluations = activeRules.map((rule) => {
     const sourceMap = rule.pipeline === "copy" ? copyMap : visualMap;
     const found = sourceMap.get(rule.ruleId);
 
@@ -73,7 +85,8 @@ export function buildFinalAuditReport(params: {
     (sum, item) => sum + (item.passed ? item.weight : 0),
     0
   );
-  const overallScore = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0;
+  const overallScore =
+    totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0;
 
   let readinessStatus: FinalAuditReport["readinessStatus"] = "NEEDS_REVISION";
   if (blockerFailed) {

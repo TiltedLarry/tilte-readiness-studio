@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractStyleGuideFromFile } from "@/lib/ai/guideExtractor";
-import { collections } from "@/lib/db/firebaseAdmin";
+import { collections, hasAdminCredentials } from "@/lib/db/firebaseAdmin";
 
 const SUPPORTED_GUIDE_TYPES = [
   "application/pdf",
@@ -9,6 +9,9 @@ const SUPPORTED_GUIDE_TYPES = [
 ];
 
 export async function GET() {
+  if (!hasAdminCredentials()) {
+    return NextResponse.json({ guides: [] });
+  }
   const snapshot = await collections.styleGuides.get();
   const guides = snapshot.docs.map((doc) => ({
     id: doc.id,

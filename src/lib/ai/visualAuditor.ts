@@ -4,15 +4,21 @@ import {
   type VisualAuditOutput,
 } from "@/lib/schemas/audit.schema";
 import type { StyleGuideProfile } from "@/lib/schemas/styleGuide.schema";
-import { EMAIL_BEST_PRACTICES_RUBRIC } from "@/lib/scoring/rubric";
+import {
+  EMAIL_BEST_PRACTICES_RUBRIC,
+  type RubricRuleDefinition,
+} from "@/lib/scoring/rubric";
 
 export async function runVisualAudit(params: {
   imageBase64: string;
   mimeType: "image/png" | "image/jpeg" | "image/webp";
   styleGuide?: StyleGuideProfile | null;
+  rubric?: RubricRuleDefinition[];
 }): Promise<VisualAuditOutput> {
-  const visualRules = EMAIL_BEST_PRACTICES_RUBRIC.filter((r) => r.pipeline === "visual");
-  const rubricText = visualRules
+  const activeRubric = (params.rubric ?? EMAIL_BEST_PRACTICES_RUBRIC).filter(
+    (r) => r.enabled !== false && r.pipeline === "visual"
+  );
+  const rubricText = activeRubric
     .map((r) => `- ${r.ruleId} (${r.ruleTitle}): ${r.criteria}`)
     .join("\n");
 

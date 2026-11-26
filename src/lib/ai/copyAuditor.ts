@@ -4,16 +4,22 @@ import {
   type CopyAuditOutput,
 } from "@/lib/schemas/audit.schema";
 import type { StyleGuideProfile } from "@/lib/schemas/styleGuide.schema";
-import { EMAIL_BEST_PRACTICES_RUBRIC } from "@/lib/scoring/rubric";
+import {
+  EMAIL_BEST_PRACTICES_RUBRIC,
+  type RubricRuleDefinition,
+} from "@/lib/scoring/rubric";
 
 export async function runCopyAudit(params: {
   subjectLine: string;
   previewText: string;
   bodyCopy: string;
   styleGuide?: StyleGuideProfile | null;
+  rubric?: RubricRuleDefinition[];
 }): Promise<CopyAuditOutput> {
-  const copyRules = EMAIL_BEST_PRACTICES_RUBRIC.filter((r) => r.pipeline === "copy");
-  const rubricText = copyRules
+  const activeRubric = (params.rubric ?? EMAIL_BEST_PRACTICES_RUBRIC).filter(
+    (r) => r.enabled !== false && r.pipeline === "copy"
+  );
+  const rubricText = activeRubric
     .map((r) => `- ${r.ruleId} (${r.ruleTitle}): ${r.criteria}`)
     .join("\n");
 

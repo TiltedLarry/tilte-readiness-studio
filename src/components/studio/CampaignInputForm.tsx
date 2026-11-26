@@ -12,9 +12,11 @@ import {
 import { FinalAuditReport } from "@/lib/schemas/audit.schema";
 import { StyleGuideProfile } from "@/lib/schemas/styleGuide.schema";
 import { StyleGuideUploaderModal } from "@/components/style-guide/StyleGuideUploaderModal";
+import { auth } from "@/lib/firebase/client";
 
 interface CampaignInputFormProps {
   styleGuides: StyleGuideProfile[];
+  getIdToken?: () => Promise<string | null>;
   onAuditComplete: (data: {
     reportId: string;
     campaignId: string;
@@ -25,6 +27,7 @@ interface CampaignInputFormProps {
 
 export function CampaignInputForm({
   styleGuides: initialGuides,
+  getIdToken,
   onAuditComplete,
 }: CampaignInputFormProps) {
   const [guidesList, setGuidesList] =
@@ -82,8 +85,13 @@ export function CampaignInputForm({
       formData.append("bodyCopy", bodyCopy);
       formData.append("designImage", imageFile);
 
+      const token =
+        (getIdToken ? await getIdToken() : null) ??
+        (await auth.currentUser?.getIdToken()) ??
+        null;
       const res = await fetch("/api/audit", {
         method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: formData,
       });
 
@@ -112,7 +120,7 @@ export function CampaignInputForm({
     <>
       <form
         onSubmit={handleSubmit}
-        className="h-full overflow-y-auto p-6 bg-white rounded-3xl shadow-[0_1px_3px_0_rgba(0,0,0,0.05)] space-y-5"
+        className="p-6 bg-white rounded-3xl shadow-[0_1px_3px_0_rgba(0,0,0,0.05)] space-y-5"
       >
         <div>
           <h2 className="text-lg font-medium text-[#1F1F1F]">

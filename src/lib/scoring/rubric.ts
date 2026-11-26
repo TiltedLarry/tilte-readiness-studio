@@ -6,6 +6,7 @@ export interface RubricRuleDefinition {
   weight: number;
   criteria: string;
   isBlocker?: boolean;
+  enabled?: boolean;
 }
 
 export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
@@ -16,6 +17,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "copy",
     weight: 10,
     criteria: "Subject line is 20–60 characters with the primary value proposition front-loaded.",
+    enabled: true,
   },
   {
     ruleId: "PREHEADER_SYNERGY",
@@ -24,6 +26,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "copy",
     weight: 10,
     criteria: "Pre-header extends and complements the subject line without repeating it verbatim.",
+    enabled: true,
   },
   {
     ruleId: "BRAND_TONE_ALIGNMENT",
@@ -32,6 +35,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "copy",
     weight: 15,
     criteria: "Body copy matches the brand's target voice adjectives and reading level.",
+    enabled: true,
   },
   {
     ruleId: "FORBIDDEN_WORDS_CHECK",
@@ -40,6 +44,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "copy",
     weight: 10,
     criteria: "Zero forbidden brand words, clichés, or high-risk spam trigger phrases appear.",
+    enabled: true,
   },
   {
     ruleId: "PRIMARY_CTA_CLARITY",
@@ -48,6 +53,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "copy",
     weight: 10,
     criteria: "A single, action-oriented primary CTA is clearly stated with unambiguous next steps.",
+    enabled: true,
   },
   {
     ruleId: "BRAND_COLOR_COMPLIANCE",
@@ -56,6 +62,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "visual",
     weight: 10,
     criteria: "Dominant colors and CTA button styling match approved primary/secondary brand hex codes.",
+    enabled: true,
   },
   {
     ruleId: "CTA_ABOVE_FOLD",
@@ -64,6 +71,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "visual",
     weight: 10,
     criteria: "The primary CTA button is clearly visible within the top 600px viewport.",
+    enabled: true,
   },
   {
     ruleId: "VISUAL_CONTRAST_HIERARCHY",
@@ -72,6 +80,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "visual",
     weight: 10,
     criteria: "Typography, button contrast, and logo placement follow accessibility and brand rules.",
+    enabled: true,
   },
   {
     ruleId: "IMAGE_TO_TEXT_RATIO",
@@ -80,6 +89,7 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     pipeline: "visual",
     weight: 5,
     criteria: "Layout avoids image-only email traps and maintains a healthy text-to-image balance.",
+    enabled: true,
   },
   {
     ruleId: "MANDATORY_LEGAL_FOOTER",
@@ -89,5 +99,6 @@ export const EMAIL_BEST_PRACTICES_RUBRIC: RubricRuleDefinition[] = [
     weight: 10,
     criteria: "Required legal disclaimers, physical address, and unsubscribe language are present.",
     isBlocker: true,
+    enabled: true,
   },
 ];

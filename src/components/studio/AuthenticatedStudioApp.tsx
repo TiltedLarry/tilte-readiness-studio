@@ -30,12 +30,14 @@ interface SavedReportSummary {
 }
 
 export function AuthenticatedStudioApp({
-  styleGuides,
+  styleGuides: initialStyleGuides = [],
 }: {
-  styleGuides: StyleGuideProfile[];
+  styleGuides?: StyleGuideProfile[];
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [styleGuides, setStyleGuides] =
+    useState<StyleGuideProfile[]>(initialStyleGuides);
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -75,6 +77,24 @@ export function AuthenticatedStudioApp({
       if (unsub) unsub();
     };
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    fetch("/api/style-guide")
+      .then((res) => (res.ok ? res.json() : { guides: [] }))
+      .then((data) => {
+        if (active && Array.isArray(data.guides)) {
+          setStyleGuides(data.guides);
+        }
+      })
+      .catch(() => {
+        // Ignore fetch errors when Firestore isn't configured
+      });
+    return () => {
+      active = false;
+    };
+  }, [user]);
 
   const loadHistory = async () => {
     setIsHistoryOpen(true);

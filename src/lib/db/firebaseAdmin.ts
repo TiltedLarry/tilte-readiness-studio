@@ -61,17 +61,20 @@ function getFirebaseAdminApp(): App {
   return initializeApp(options);
 }
 
-let cachedDb: ReturnType<typeof getFirestore> | null = null;
+const globalForFirebase = globalThis as unknown as {
+  firestoreConfigured?: boolean;
+};
 
 function db() {
-  if (cachedDb) return cachedDb;
   const instance = getFirestore(getFirebaseAdminApp());
-  instance.settings({
-    ignoreUndefinedProperties: true,
-    preferRest: true, // Uses fast HTTP/REST instead of hanging gRPC sockets in serverless
-  });
-  cachedDb = instance;
-  return cachedDb;
+  if (!globalForFirebase.firestoreConfigured) {
+    instance.settings({
+      ignoreUndefinedProperties: true,
+      preferRest: true, // Uses fast HTTP/REST instead of hanging gRPC sockets in serverless
+    });
+    globalForFirebase.firestoreConfigured = true;
+  }
+  return instance;
 }
 
 export const collections = {

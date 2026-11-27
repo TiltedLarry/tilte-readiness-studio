@@ -17,6 +17,8 @@ import { auth } from "@/lib/firebase/client";
 interface CampaignInputFormProps {
   styleGuides: StyleGuideProfile[];
   getIdToken?: () => Promise<string | null>;
+  onAuditStart?: () => void;
+  onAuditEnd?: () => void;
   onAuditComplete: (data: {
     reportId: string;
     campaignId: string;
@@ -28,6 +30,8 @@ interface CampaignInputFormProps {
 export function CampaignInputForm({
   styleGuides: initialGuides,
   getIdToken,
+  onAuditStart,
+  onAuditEnd,
   onAuditComplete,
 }: CampaignInputFormProps) {
   const [guidesList, setGuidesList] =
@@ -76,6 +80,7 @@ export function CampaignInputForm({
     }
 
     setIsSubmitting(true);
+    onAuditStart?.();
     try {
       const formData = new FormData();
       formData.append("campaignName", campaignName);
@@ -95,7 +100,16 @@ export function CampaignInputForm({
         body: formData,
       });
 
-      const data = await res.json();
+      const rawText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        throw new Error(
+          `Server returned non-JSON response (${res.status}). Check terminal logs for details.`
+        );
+      }
+
       if (!res.ok) {
         throw new Error(data.error || "Audit failed.");
       }
@@ -110,6 +124,7 @@ export function CampaignInputForm({
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setIsSubmitting(false);
+      onAuditEnd?.();
     }
   };
 

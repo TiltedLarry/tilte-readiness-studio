@@ -75,26 +75,32 @@ export async function POST(req: NextRequest) {
     const imageBuffer = Buffer.from(arrayBuffer);
     const imageBase64 = imageBuffer.toString("base64");
 
-    // 4. Create Campaign record & upload PNG to Firebase Storage in parallel
-    const storagePath = `campaigns/${Date.now()}-${imageFile.name.replace(/\s+/g, "_")}`;
-    const fileRef = storageBucket.file(storagePath);
-
-    const [campaignDoc] = await Promise.all([
-      collections.campaigns.add({
-        campaignName,
-        styleGuideId,
-        subjectLine,
-        previewText,
-        bodyCopy,
-        pngStoragePath: storagePath,
-        ownerUid: decodedUser?.uid ?? null,
-        ownerEmail: decodedUser?.email ?? null,
-        createdAt: new Date().toISOString(),
-      }),
-      fileRef.save(imageBuffer, {
+    // 4. Upload PNG to Firebase Storage (non-blocking fallback if bucket isn't enabled yet)
+    let savedStoragePath: string | null = null;
+    try {
+      const storagePath = `campaigns/${Date.now()}-${imageFile.name.replace(/\s+/g, "_")}`;
+      await storageBucket.file(storagePath).save(imageBuffer, {
         metadata: { contentType: imageFile.type },
-      }),
-    ]);
+      });
+      savedStoragePath = storagePath;
+    } catch (storageErr) {
+      console.warn(
+        "[STORAGE_SKIPPED]: Firebase Storage bucket unavailable, continuing audit in memory.",
+        storageErr
+      );
+    }
+
+    const campaignDoc = await collections.campaigns.add({
+      campaignName,
+      styleGuideId,
+      subjectLine,
+      previewText,
+      bodyCopy,
+      pngStoragePath: savedStoragePath,
+      ownerUid: decodedUser?.uid ?? null,
+      ownerEmail: decodedUser?.email ?? null,
+      createdAt: new Date().toISOString(),
+    });
 
     // 5. Run the 3 isolated Gemini Auditors in parallel (Fastest total latency)
     const [copyAudit, inboxSimulation, visualAudit] = await Promise.all([

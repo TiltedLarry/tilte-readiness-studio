@@ -1,4 +1,9 @@
-import { ai, TEXT_AUDIT_MODEL, toGeminiResponseSchema } from "./geminiClient";
+import {
+  FALLBACK_TEXT_MODEL,
+  generateWithFallback,
+  PRIMARY_TEXT_MODEL,
+  toGeminiResponseSchema,
+} from "./geminiClient";
 import {
   CopyAuditOutputSchema,
   type CopyAuditOutput,
@@ -25,10 +30,9 @@ export async function runCopyAudit(params: {
 
   const brandContext = params.styleGuide
     ? `Brand: ${params.styleGuide.brandName}
-Tone Adjectives: ${params.styleGuide.toneOfVoice.adjectives.join(", ")}
-Reading Level Target: ${params.styleGuide.toneOfVoice.readingLevelTarget}
-Forbidden Words: ${params.styleGuide.toneOfVoice.forbiddenWords.join(", ") || "None"}
-Compliance Rules: ${params.styleGuide.complianceRules.join("; ") || "Standard CAN-SPAM / GDPR unsubscribe & physical address"}`
+Tone Adjectives: ${params.styleGuide.toneAndCompliance.toneAdjectives.join(", ")}
+Forbidden Words: ${params.styleGuide.toneAndCompliance.forbiddenWords.join(", ") || "None"}
+Mandatory Footer: ${params.styleGuide.toneAndCompliance.mandatoryFooter || "Standard CAN-SPAM / GDPR unsubscribe & physical address"}`
     : "No specific brand style guide provided; evaluate against general email best practices and standard legal compliance.";
 
   const prompt = `
@@ -46,15 +50,18 @@ Body Copy:
 ${params.bodyCopy}
 `;
 
-  const response = await ai.models.generateContent({
-    model: TEXT_AUDIT_MODEL,
-    contents: prompt,
-    config: {
-      temperature: 0.1,
-      responseMimeType: "application/json",
-      responseSchema: toGeminiResponseSchema(CopyAuditOutputSchema),
+  const response = await generateWithFallback(
+    {
+      contents: prompt,
+      config: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: toGeminiResponseSchema(CopyAuditOutputSchema),
+      },
     },
-  });
+    PRIMARY_TEXT_MODEL,
+    FALLBACK_TEXT_MODEL
+  );
 
   const parsed = JSON.parse(response.text ?? "{}");
   return CopyAuditOutputSchema.parse(parsed);

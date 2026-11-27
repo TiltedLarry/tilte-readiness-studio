@@ -2,23 +2,29 @@ import { z } from "zod";
 
 export const StyleGuideProfileSchema = z.object({
   id: z.string().uuid().optional(),
-  brandName: z.string().min(1, "Brand name is required"),
-  toneOfVoice: z.object({
-    adjectives: z
+  brandName: z.string().min(1),
+  colors: z.object({
+    primaryHex: z
       .array(z.string())
-      .describe("3-5 adjectives defining brand voice, e.g., 'Empathetic, Clear, Authoritative'"),
-    forbiddenWords: z.array(z.string()).describe("Jargon, clichés, or banned phrases"),
-    readingLevelTarget: z.string().describe("e.g., 'Grade 6-8 (Accessible)'"),
+      .describe("Primary brand hex codes, e.g., ['#004B87']"),
+    secondaryHex: z.array(z.string()).describe("Secondary/accent hex codes"),
+    ctaButtonRule: z
+      .string()
+      .describe("Approved CTA button fill and text color rule"),
   }),
-  visualIdentity: z.object({
-    primaryHexColors: z.array(z.string()).describe("Approved primary hex codes, e.g., ['#1A73E8']"),
-    secondaryHexColors: z.array(z.string()).describe("Approved accent/background hex codes"),
-    ctaButtonStyle: z.string().describe("Rules for primary CTA button color, shape, and contrast"),
-    logoPlacementRules: z.string().describe("Where and how the logo must appear in the header/footer"),
+  logoRules: z
+    .string()
+    .describe("Header/footer placement, clear space, and background contrast rules"),
+  imageGuidance: z
+    .string()
+    .describe("Photography style, illustration rules, and image-to-text balance"),
+  toneAndCompliance: z.object({
+    toneAdjectives: z.array(z.string()).describe("3-4 brand voice adjectives"),
+    forbiddenWords: z.array(z.string()).describe("Banned phrases or jargon"),
+    mandatoryFooter: z
+      .string()
+      .describe("Required legal disclaimer or unsubscribe rule"),
   }),
-  complianceRules: z
-    .array(z.string())
-    .describe("Mandatory legal disclaimers, unsubscribe text, or regional requirements"),
 });
 
 export type StyleGuideProfile = z.infer<typeof StyleGuideProfileSchema>;

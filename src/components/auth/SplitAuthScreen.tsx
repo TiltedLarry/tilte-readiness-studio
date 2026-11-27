@@ -74,7 +74,7 @@ export function SplitAuthScreen() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/auth-hero.jpg"
-          alt="Creative campaign workspace"
+           alt="Creative campaign workspace"
           className="absolute inset-0 w-full h-full object-cover opacity-85"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#001D35]/90 via-[#001D35]/35 to-transparent" />

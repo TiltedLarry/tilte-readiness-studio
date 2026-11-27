@@ -1,4 +1,9 @@
-import { ai, VISUAL_AUDIT_MODEL, toGeminiResponseSchema } from "./geminiClient";
+import {
+  FALLBACK_VISUAL_MODEL,
+  generateWithFallback,
+  PRIMARY_VISUAL_MODEL,
+  toGeminiResponseSchema,
+} from "./geminiClient";
 import {
   VisualAuditOutputSchema,
   type VisualAuditOutput,
@@ -24,35 +29,39 @@ export async function runVisualAudit(params: {
 
   const rulesContext = params.styleGuide
     ? `Brand: ${params.styleGuide.brandName}
-Primary Hex Colors: ${params.styleGuide.visualIdentity.primaryHexColors.join(", ")}
-Secondary Hex Colors: ${params.styleGuide.visualIdentity.secondaryHexColors.join(", ")}
-CTA Button Style: ${params.styleGuide.visualIdentity.ctaButtonStyle}
-Logo Placement Rules: ${params.styleGuide.visualIdentity.logoPlacementRules}`
+Primary Hex Colors: ${params.styleGuide.colors.primaryHex.join(", ")}
+Secondary Hex Colors: ${params.styleGuide.colors.secondaryHex.join(", ")}
+CTA Button Rule: ${params.styleGuide.colors.ctaButtonRule}
+Logo Rules: ${params.styleGuide.logoRules}
+Image Guidance: ${params.styleGuide.imageGuidance}`
     : "No brand rules attached; assess general visual hierarchy, CTA prominence, and contrast.";
 
-  const response = await ai.models.generateContent({
-    model: VISUAL_AUDIT_MODEL,
-    contents: [
-      {
-        inlineData: {
-          mimeType: params.mimeType,
-          data: params.imageBase64,
+  const response = await generateWithFallback(
+    {
+      contents: [
+        {
+          inlineData: {
+            mimeType: params.mimeType,
+            data: params.imageBase64,
+          },
         },
-      },
-      `Audit this email design image against the visual rules and brand identity below.
+        `Audit this email design image against the visual rules and brand identity below.
 Return one evaluation object per ruleId with exact ruleId matching, factual finding, exact visual location/area evidence, and concrete suggestedFix (empty string if passed).
 
 Rules to evaluate:
 ${rubricText}
 
 ${rulesContext}`,
-    ],
-    config: {
-      temperature: 0.1,
-      responseMimeType: "application/json",
-      responseSchema: toGeminiResponseSchema(VisualAuditOutputSchema),
+      ],
+      config: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+        responseSchema: toGeminiResponseSchema(VisualAuditOutputSchema),
+      },
     },
-  });
+    PRIMARY_VISUAL_MODEL,
+    FALLBACK_VISUAL_MODEL
+  );
 
   const parsed = JSON.parse(response.text ?? "{}");
   return VisualAuditOutputSchema.parse(parsed);

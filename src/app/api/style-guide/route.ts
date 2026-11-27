@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { extractStyleGuideFromFile } from "@/lib/ai/guideExtractor";
+import { z } from "zod";
 import { collections, hasAdminCredentials } from "@/lib/db/firebaseAdmin";
+import { StyleGuideProfileSchema } from "@/lib/schemas/styleGuide.schema";
 
-const SUPPORTED_GUIDE_TYPES = [
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-];
+const SaveGuidesPayloadSchema = z.object({
+  guides: z.array(StyleGuideProfileSchema).min(1),
+});
 
 export async function GET() {
   if (!hasAdminCredentials()) {
@@ -22,51 +21,30 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
-    const files = formData.getAll("files") as File[];
+    const body = await req.json();
+    const parsed = SaveGuidesPayloadSchema.safeParse(body);
 
-    if (!files || files.length === 0) {
+    if (!parsed.success) {
       return NextResponse.json(
-        {
-          error:
-            "Please upload at least one PDF, TXT, or Markdown style guide.",
-        },
+        { error: "Invalid style guide data", details: parsed.error.flatten() },
         { status: 400 }
       );
     }
 
-    // Process all uploaded style guides in parallel
-    const createdProfiles = await Promise.all(
-      files.map(async (file) => {
-        const mimeType = SUPPORTED_GUIDE_TYPES.includes(file.type)
-          ? file.type
-          : "text/plain"; // Fallback for .md files browsers sometimes label as octet-stream
-
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const cleanFallbackName = file.name.replace(/\.[^/.]+$/, "");
-
-        const profile = await extractStyleGuideFromFile(
-          buffer,
-          mimeType,
-          cleanFallbackName
-        );
-
-        const docRef = await collections.styleGuides.add(profile);
-        return { id: docRef.id, ...profile };
+    const savedGuides = await Promise.all(
+      parsed.data.guides.map(async (profile) => {
+        const cleanData = { ...profile };
+        delete cleanData.id;
+        const docRef = await collections.styleGuides.add(cleanData);
+        return { id: docRef.id, ...cleanData };
       })
     );
 
-    return NextResponse.json({ guides: createdProfiles }, { status: 201 });
+    return NextResponse.json({ guides: savedGuides }, { status: 201 });
   } catch (error) {
-    console.error("[BATCH_STYLE_GUIDE_ERROR]:", error);
+    console.error("[CI_SAVE_ERROR]:", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to process uploaded style guides.",
-      },
+      { error: "Failed to save approved style guides." },
       { status: 500 }
     );
   }

@@ -95,8 +95,9 @@ export function AuthenticatedStudioApp({
   return (
     <main className="min-h-screen flex flex-col bg-[#F8FAFD] text-[#1F1F1F]">
       {/* Clean Header — Badge Removed, Role-Aware Controls Added */}
-      <header className="sticky top-0 z-30 h-16 px-6 flex items-center justify-between bg-[#F8FAFD]/90 backdrop-blur-md">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 h-18 bg-[#F8FAFD]/90 backdrop-blur-md">
+        <div className="max-w-[1440px] w-full h-full mx-auto px-6 sm:px-10 lg:px-14 flex items-center justify-between">
+          <div className="flex items-center gap-3">
           <Image
             src="/studio-icon.svg"
             alt="Email Campaign Readiness Studio"
@@ -146,9 +147,10 @@ export function AuthenticatedStudioApp({
             </button>
           </div>
         </div>
+        </div>
       </header>
 
-      <div className="flex-1 px-4 pb-12 max-w-[1600px] w-full mx-auto">
+      <div className="flex-1 px-6 sm:px-10 lg:px-14 pt-6 pb-16 max-w-[1440px] w-full mx-auto">
         <StudioWorkspace
           styleGuides={styleGuides}
           externalAudit={selectedPastAudit}

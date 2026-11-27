@@ -40,12 +40,10 @@ function getFirebaseAdminApp(): App {
 
   const projectId =
     process.env.FIREBASE_PROJECT_ID ??
-    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
-    process.env.VITE_FIREBASE_PROJECT_ID;
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
   const storageBucketName =
     process.env.FIREBASE_STORAGE_BUCKET ??
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ??
-    process.env.VITE_FIREBASE_STORAGE_BUCKET;
+    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
   const options: AppOptions = {};
   if (projectId) options.projectId = projectId;

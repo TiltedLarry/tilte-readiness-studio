@@ -14,7 +14,9 @@ export function BrandRulesModal({ profile }: BrandRulesModalProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{profile.brandName} — Extracted Rules</CardTitle>
+        <CardTitle className="text-base">
+          {profile.brandName} — Extracted Corporate CI
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div>
@@ -22,7 +24,7 @@ export function BrandRulesModal({ profile }: BrandRulesModalProps) {
             Primary Colors
           </p>
           <div className="flex flex-wrap gap-2">
-            {profile.visualIdentity.primaryHexColors.map((hex) => (
+            {profile.colors.primaryHex.map((hex) => (
               <Badge key={hex} variant="outline">
                 {hex}
               </Badge>
@@ -34,8 +36,8 @@ export function BrandRulesModal({ profile }: BrandRulesModalProps) {
             Tone of Voice
           </p>
           <p className="text-muted-foreground">
-            {profile.toneOfVoice.adjectives.join(", ") || "Not specified"} (
-            {profile.toneOfVoice.readingLevelTarget})
+            {profile.toneAndCompliance.toneAdjectives.join(", ") ||
+              "Not specified"}
           </p>
         </div>
         <div>
@@ -43,8 +45,8 @@ export function BrandRulesModal({ profile }: BrandRulesModalProps) {
             Forbidden Words
           </p>
           <p className="text-muted-foreground">
-            {profile.toneOfVoice.forbiddenWords.length > 0
-              ? profile.toneOfVoice.forbiddenWords.join(", ")
+            {profile.toneAndCompliance.forbiddenWords.length > 0
+              ? profile.toneAndCompliance.forbiddenWords.join(", ")
               : "None"}
           </p>
         </div>

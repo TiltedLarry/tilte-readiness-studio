@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ai, TEXT_AUDIT_MODEL } from "@/lib/ai/geminiClient";
+import {
+  FALLBACK_TEXT_MODEL,
+  generateWithFallback,
+  PRIMARY_TEXT_MODEL,
+} from "@/lib/ai/geminiClient";
 import { collections, getStyleGuideById } from "@/lib/db/firebaseAdmin";
 import { FinalAuditReport } from "@/lib/schemas/audit.schema";
 
@@ -67,14 +71,17 @@ ${JSON.stringify(report, null, 2)}
       parts: [{ text: m.text }],
     }));
 
-    const response = await ai.models.generateContent({
-      model: TEXT_AUDIT_MODEL,
-      contents: formattedContents,
-      config: {
-        systemInstruction,
-        temperature: 0.3,
+    const response = await generateWithFallback(
+      {
+        contents: formattedContents,
+        config: {
+          systemInstruction,
+          temperature: 0.3,
+        },
       },
-    });
+      PRIMARY_TEXT_MODEL,
+      FALLBACK_TEXT_MODEL
+    );
 
     return NextResponse.json({
       reply:

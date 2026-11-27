@@ -1,4 +1,9 @@
-import { ai, TEXT_AUDIT_MODEL, toGeminiResponseSchema } from "./geminiClient";
+import {
+  FALLBACK_TEXT_MODEL,
+  generateWithFallback,
+  PRIMARY_TEXT_MODEL,
+  toGeminiResponseSchema,
+} from "./geminiClient";
 import {
   InboxSimulationOutputSchema,
   type InboxSimulationOutput,
@@ -23,18 +28,24 @@ Body:
 ${bodyCopy}
 `;
 
-  const response = await ai.models.generateContent({
-    model: TEXT_AUDIT_MODEL,
-    contents: prompt,
-    config: {
-      temperature: 0.2,
-      responseMimeType: "application/json",
-      responseSchema: toGeminiResponseSchema(InboxSimulationOutputSchema),
+  const response = await generateWithFallback(
+    {
+      contents: prompt,
+      config: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        responseSchema: toGeminiResponseSchema(InboxSimulationOutputSchema),
+      },
     },
-  });
+    PRIMARY_TEXT_MODEL,
+    FALLBACK_TEXT_MODEL
+  );
 
   const parsed = JSON.parse(response.text ?? "{}");
-  if (typeof parsed.appleMailAiSummary === "string" && parsed.appleMailAiSummary.length > 140) {
+  if (
+    typeof parsed.appleMailAiSummary === "string" &&
+    parsed.appleMailAiSummary.length > 140
+  ) {
     parsed.appleMailAiSummary = parsed.appleMailAiSummary.slice(0, 137) + "...";
   }
   return InboxSimulationOutputSchema.parse(parsed);

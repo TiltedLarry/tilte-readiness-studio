@@ -45,8 +45,10 @@ function getFirebaseAdminApp(): App {
   if (projectId) options.projectId = projectId;
 
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\\n/g, "\n");
 
   if (serviceAccountJson) {
     options.credential = cert(JSON.parse(serviceAccountJson));

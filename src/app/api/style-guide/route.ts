@@ -14,12 +14,25 @@ const SaveGuidesPayloadSchema = z.object({
   guides: z.array(IncomingGuideSchema).min(1),
 });
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms.`)), ms)
+    ),
+  ]);
+}
+
 export async function GET() {
   if (!hasAdminCredentials()) {
     return NextResponse.json({ guides: [] }, { status: 200 });
   }
   try {
-    const snapshot = await collections.styleGuides.get();
+    const snapshot = await withTimeout(
+      collections.styleGuides.get(),
+      10_000,
+      "Firestore styleGuides.get()"
+    );
     const guides = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -28,7 +41,12 @@ export async function GET() {
   } catch (error) {
     console.error("[CI_FETCH_ERROR]:", error);
     return NextResponse.json(
-      { error: "Failed to load Corporate CI guides." },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to load Corporate CI guides.",
+      },
       { status: 500 }
     );
   }
@@ -63,7 +81,11 @@ export async function POST(req: NextRequest) {
           })
         );
 
-        const docRef = await collections.styleGuides.add(cleanData);
+        const docRef = await withTimeout(
+          collections.styleGuides.add(cleanData),
+          10_000,
+          "Firestore styleGuides.add()"
+        );
         return { id: docRef.id, ...cleanData };
       })
     );

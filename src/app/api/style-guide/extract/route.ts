@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { scanStyleGuideLocally } from "@/lib/ci/localCiScanner";
 import { extractStyleGuideFromFile } from "@/lib/ai/guideExtractor";
 
-const SUPPORTED_GUIDE_TYPES = [
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-];
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,27 +18,40 @@ export async function POST(req: NextRequest) {
 
     const previews = await Promise.all(
       files.map(async (file) => {
-        const mimeType = SUPPORTED_GUIDE_TYPES.includes(file.type)
-          ? file.type
-          : "text/plain";
+        const mimeType =
+          file.type ||
+          (file.name.toLowerCase().endsWith(".pdf")
+            ? "application/pdf"
+            : "text/plain");
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const fallbackName = file.name.replace(/\.[^/.]+$/, "");
 
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const cleanFallbackName = file.name.replace(/\.[^/.]+$/, "");
+        // Step 1: Instant local regex + PDF text scan (< 100ms)
+        const localResult = await scanStyleGuideLocally(
+          buffer,
+          mimeType,
+          fallbackName
+        );
 
-        return extractStyleGuideFromFile(buffer, mimeType, cleanFallbackName);
+        // If local scan extracted colors & text cleanly, return immediately!
+        if (!localResult.needsAiEnrichment) {
+          return localResult.profile;
+        }
+
+        // Step 2: Only fall back to multimodal AI if the PDF was image-only / scanned
+        return extractStyleGuideFromFile(buffer, mimeType, fallbackName);
       })
     );
 
     return NextResponse.json({ previews }, { status: 200 });
   } catch (error) {
-    console.error("[CI_EXTRACT_PREVIEW_ERROR]:", error);
+    console.error("[CI_EXTRACT_ERROR]:", error);
     return NextResponse.json(
       {
         error:
           error instanceof Error
             ? error.message
-            : "Failed to extract brand rules from uploaded file(s).",
+            : "Failed to extract Corporate CI rules.",
       },
       { status: 500 }
     );

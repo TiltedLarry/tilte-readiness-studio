@@ -27,6 +27,59 @@ interface CampaignInputFormProps {
   }) => void;
 }
 
+async function optimizeDesignImageForAudit(file: File): Promise<File> {
+  // Keep small/medium exports untouched; downscale > 1MB Figma 2x/3x exports for fast multimodal inference
+  if (file.size <= 1_000_000) return file;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      const maxWidth = 1000;
+      const scale = Math.min(1, maxWidth / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+        return;
+      }
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(objectUrl);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          resolve(
+            new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+              type: "image/jpeg",
+            })
+          );
+        },
+        "image/jpeg",
+        0.85
+      );
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
+
+    img.src = objectUrl;
+  });
+}
+
 async function createCompressedThumbnail(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -119,7 +172,10 @@ export function CampaignInputForm({
     setIsSubmitting(true);
     onAuditStart?.();
     try {
-      const thumbnailDataUrl = await createCompressedThumbnail(imageFile);
+      const [thumbnailDataUrl, optimizedImage] = await Promise.all([
+        createCompressedThumbnail(imageFile),
+        optimizeDesignImageForAudit(imageFile),
+      ]);
 
       const formData = new FormData();
       formData.append("campaignName", campaignName);
@@ -127,7 +183,7 @@ export function CampaignInputForm({
       formData.append("subjectLine", subjectLine);
       formData.append("previewText", previewText);
       formData.append("bodyCopy", bodyCopy);
-      formData.append("designImage", imageFile);
+      formData.append("designImage", optimizedImage);
       formData.append("thumbnailDataUrl", thumbnailDataUrl);
 
       const token =

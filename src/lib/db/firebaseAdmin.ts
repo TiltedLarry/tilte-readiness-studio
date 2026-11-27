@@ -61,8 +61,17 @@ function getFirebaseAdminApp(): App {
   return initializeApp(options);
 }
 
+let cachedDb: ReturnType<typeof getFirestore> | null = null;
+
 function db() {
-  return getFirestore(getFirebaseAdminApp());
+  if (cachedDb) return cachedDb;
+  const instance = getFirestore(getFirebaseAdminApp());
+  instance.settings({
+    ignoreUndefinedProperties: true,
+    preferRest: true, // Uses fast HTTP/REST instead of hanging gRPC sockets in serverless
+  });
+  cachedDb = instance;
+  return cachedDb;
 }
 
 export const collections = {

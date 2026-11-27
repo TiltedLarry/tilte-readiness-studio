@@ -3,6 +3,8 @@ import { z } from "zod";
 import { collections, hasAdminCredentials } from "@/lib/db/firebaseAdmin";
 import { StyleGuideProfileSchema } from "@/lib/schemas/styleGuide.schema";
 
+export const maxDuration = 60;
+
 // Strip `id` before validating so AI-generated slug IDs never trigger UUID validation errors
 const IncomingGuideSchema = StyleGuideProfileSchema.omit({ id: true }).extend({
   id: z.string().optional(),

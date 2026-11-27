@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { runCopyAudit } from "@/lib/ai/copyAuditor";
-import { runInboxSimulation } from "@/lib/ai/inboxSimulator";
-import { runVisualAudit } from "@/lib/ai/visualAuditor";
+import { runUnifiedCampaignAudit } from "@/lib/ai/unifiedAuditor";
 import {
   collections,
   getActiveBestPractices,
@@ -15,6 +13,8 @@ import {
   PromptInjectionError,
   sanitizeUntrustedInput,
 } from "@/lib/security/promptGuard";
+
+export const maxDuration = 60;
 
 // Validate text fields coming from FormData
 const AuditFormSchema = z.object({
@@ -129,23 +129,20 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     });
 
-    // 5. Run the 3 isolated Gemini Auditors in parallel (Fastest total latency)
-    const [copyAudit, inboxSimulation, visualAudit] = await Promise.all([
-      runCopyAudit({
-        subjectLine: safeSubjectLine,
-        previewText: safePreviewText,
-        bodyCopy: safeBodyCopy,
-        styleGuide,
-        rubric: activeRubric,
-      }),
-      runInboxSimulation(safeSubjectLine, safePreviewText, safeBodyCopy),
-      runVisualAudit({
-        imageBase64,
-        mimeType: imageFile.type as AllowedMimeType,
-        styleGuide,
-        rubric: activeRubric,
-      }),
-    ]);
+    // 5. Run unified single-call multimodal Gemini audit (cuts API burst rate by 67%)
+    const {
+      copy: copyAudit,
+      inbox: inboxSimulation,
+      visual: visualAudit,
+    } = await runUnifiedCampaignAudit({
+      subjectLine: safeSubjectLine,
+      previewText: safePreviewText,
+      bodyCopy: safeBodyCopy,
+      imageBase64,
+      mimeType: imageFile.type as AllowedMimeType,
+      styleGuide,
+      rubric: activeRubric,
+    });
 
     // 6. Compute deterministic grade (Zero AI math)
     const finalReport = buildFinalAuditReport({
@@ -181,14 +178,26 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error("[AUDIT_PIPELINE_ERROR]:", error);
+    const rawMsg =
+      error instanceof Error
+        ? error.message
+        : "Unexpected error during campaign audit.";
+    const isOverloaded =
+      rawMsg.includes("503") ||
+      rawMsg.includes("UNAVAILABLE") ||
+      rawMsg.includes("high demand") ||
+      rawMsg.includes("504") ||
+      rawMsg.includes("DEADLINE_EXCEEDED") ||
+      rawMsg.toLowerCase().includes("abort") ||
+      rawMsg.toLowerCase().includes("timeout");
+
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unexpected error during campaign audit.",
+        error: isOverloaded
+          ? "Gemini AI is experiencing temporary high demand across all model pools. Please wait a few seconds and click Run Readiness Audit again."
+          : rawMsg,
       },
-      { status: 500 }
+      { status: isOverloaded ? 503 : 500 }
     );
   }
 }

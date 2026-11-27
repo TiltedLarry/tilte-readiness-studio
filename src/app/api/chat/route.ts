@@ -14,6 +14,8 @@ import {
   wrapUntrustedData,
 } from "@/lib/security/promptGuard";
 
+export const maxDuration = 60;
+
 const ChatRequestSchema = z.object({
   reportId: z.string().min(1),
   styleGuideId: z.string().min(1),

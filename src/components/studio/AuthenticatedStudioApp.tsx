@@ -21,6 +21,7 @@ interface SavedReportSummary {
   reportId: string;
   campaignId: string;
   campaignName?: string;
+  thumbnailDataUrl?: string;
   styleGuideId: string;
   overallScore: number;
   readinessStatus: FinalAuditReport["readinessStatus"];
@@ -48,21 +49,29 @@ export function AuthenticatedStudioApp({
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
+    const safetyTimer = setTimeout(() => {
+      setAuthReady(true);
+    }, 2500);
+
     try {
       unsub = onAuthStateChanged(
         auth,
         (firebaseUser) => {
+          clearTimeout(safetyTimer);
           setUser(firebaseUser);
           setAuthReady(true);
         },
         () => {
+          clearTimeout(safetyTimer);
           setAuthReady(true);
         }
       );
     } catch {
+      clearTimeout(safetyTimer);
       Promise.resolve().then(() => setAuthReady(true));
     }
     return () => {
+      clearTimeout(safetyTimer);
       if (unsub) unsub();
     };
   }, []);
@@ -203,14 +212,24 @@ export function AuthenticatedStudioApp({
                     }}
                     className="w-full text-left p-4 rounded-2xl bg-[#F0F4F9] hover:bg-[#E9EEF6] transition-colors flex items-center justify-between cursor-pointer"
                   >
-                    <div>
-                      <p className="text-sm font-medium text-[#1F1F1F]">
-                        {item.campaignName ||
-                          `Campaign ${item.campaignId.slice(0, 6)}`}
-                      </p>
-                      <p className="text-xs text-[#444746] mt-0.5">
-                        {new Date(item.createdAt).toLocaleDateString()}
-                      </p>
+                    <div className="flex items-center gap-3 min-w-0">
+                      {item.thumbnailDataUrl && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={item.thumbnailDataUrl}
+                          alt={item.campaignName || "Campaign thumbnail"}
+                          className="w-10 h-12 object-cover object-top rounded-xl bg-white shrink-0"
+                        />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[#1F1F1F] truncate">
+                          {item.campaignName ||
+                            `Campaign ${item.campaignId.slice(0, 6)}`}
+                        </p>
+                        <p className="text-xs text-[#444746] mt-0.5">
+                          {new Date(item.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
                     </div>
                     <span className="px-3 py-1 rounded-full bg-white text-xs font-semibold text-[#0B57D0]">
                       {item.overallScore} / 100

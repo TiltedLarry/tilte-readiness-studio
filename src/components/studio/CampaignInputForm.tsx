@@ -27,6 +27,43 @@ interface CampaignInputFormProps {
   }) => void;
 }
 
+async function createCompressedThumbnail(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    img.onload = () => {
+      const targetWidth = 240;
+      const scale = Math.min(1, targetWidth / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Canvas context unavailable"));
+        return;
+      }
+
+      // Fill white background in case PNG has transparent margins
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+      URL.revokeObjectURL(objectUrl);
+      resolve(canvas.toDataURL("image/jpeg", 0.65));
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Failed to load image for thumbnail"));
+    };
+
+    img.src = objectUrl;
+  });
+}
+
 export function CampaignInputForm({
   styleGuides: initialGuides,
   getIdToken,
@@ -82,6 +119,8 @@ export function CampaignInputForm({
     setIsSubmitting(true);
     onAuditStart?.();
     try {
+      const thumbnailDataUrl = await createCompressedThumbnail(imageFile);
+
       const formData = new FormData();
       formData.append("campaignName", campaignName);
       formData.append("styleGuideId", styleGuideId);
@@ -89,6 +128,7 @@ export function CampaignInputForm({
       formData.append("previewText", previewText);
       formData.append("bodyCopy", bodyCopy);
       formData.append("designImage", imageFile);
+      formData.append("thumbnailDataUrl", thumbnailDataUrl);
 
       const token =
         (getIdToken ? await getIdToken() : null) ??

@@ -9,11 +9,16 @@ async function StudioAppLoader() {
   let styleGuides: StyleGuideProfile[] = [];
   if (hasAdminCredentials()) {
     try {
-      const snapshot = await collections.styleGuides.get();
-      styleGuides = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<StyleGuideProfile, "id">),
-      }));
+      const snapshot = await Promise.race([
+        collections.styleGuides.get(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+      ]);
+      if (snapshot) {
+        styleGuides = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...(doc.data() as Omit<StyleGuideProfile, "id">),
+        }));
+      }
     } catch {
       styleGuides = [];
     }

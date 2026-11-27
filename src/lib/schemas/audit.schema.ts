@@ -62,6 +62,8 @@ export const VisualAuditOutputSchema = z.object({
 // 5. Final Combined Report (Saved to DB & Rendered in UI)
 export const FinalAuditReportSchema = z.object({
   campaignId: z.string(),
+  campaignName: z.string().optional(),
+  thumbnailDataUrl: z.string().optional(),
   createdAt: z.string(),
   overallScore: z.number().min(0).max(100),
   readinessStatus: z.enum(["READY_TO_SEND", "NEEDS_REVISION", "BLOCKED"]),

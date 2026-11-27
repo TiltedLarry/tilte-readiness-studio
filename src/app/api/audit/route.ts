@@ -8,10 +8,13 @@ import {
   getActiveBestPractices,
   getStyleGuideById,
   saveAuditReport,
-  storageBucket,
   verifyBearerToken,
 } from "@/lib/db/firebaseAdmin";
 import { buildFinalAuditReport } from "@/lib/scoring/calculator";
+import {
+  PromptInjectionError,
+  sanitizeUntrustedInput,
+} from "@/lib/security/promptGuard";
 
 // Validate text fields coming from FormData
 const AuditFormSchema = z.object({
@@ -62,8 +65,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { campaignName, styleGuideId, subjectLine, previewText, bodyCopy } =
-      parsedFields.data;
+    const { styleGuideId } = parsedFields.data;
+
+    let safeCampaignName: string;
+    let safeSubjectLine: string;
+    let safePreviewText: string;
+    let safeBodyCopy: string;
+
+    try {
+      safeCampaignName = sanitizeUntrustedInput(
+        parsedFields.data.campaignName,
+        "Campaign Name",
+        200
+      );
+      safeSubjectLine = sanitizeUntrustedInput(
+        parsedFields.data.subjectLine,
+        "Subject Line",
+        300
+      );
+      safePreviewText = sanitizeUntrustedInput(
+        parsedFields.data.previewText,
+        "Preview Text",
+        400
+      );
+      safeBodyCopy = sanitizeUntrustedInput(
+        parsedFields.data.bodyCopy,
+        "Email Body Copy",
+        20000
+      );
+    } catch (secErr) {
+      if (secErr instanceof PromptInjectionError) {
+        return NextResponse.json({ error: secErr.message }, { status: 400 });
+      }
+      throw secErr;
+    }
+
+    const rawThumbnail = formData.get("thumbnailDataUrl");
+    const thumbnailDataUrl =
+      typeof rawThumbnail === "string" && rawThumbnail.length < 150_000
+        ? rawThumbnail
+        : undefined;
 
     // 3. Fetch Style Guide, active Platform Best Practices & convert image buffer to Base64
     const [styleGuide, activeRubric, arrayBuffer] = await Promise.all([
@@ -75,28 +116,14 @@ export async function POST(req: NextRequest) {
     const imageBuffer = Buffer.from(arrayBuffer);
     const imageBase64 = imageBuffer.toString("base64");
 
-    // 4. Upload PNG to Firebase Storage (non-blocking fallback if bucket isn't enabled yet)
-    let savedStoragePath: string | null = null;
-    try {
-      const storagePath = `campaigns/${Date.now()}-${imageFile.name.replace(/\s+/g, "_")}`;
-      await storageBucket.file(storagePath).save(imageBuffer, {
-        metadata: { contentType: imageFile.type },
-      });
-      savedStoragePath = storagePath;
-    } catch (storageErr) {
-      console.warn(
-        "[STORAGE_SKIPPED]: Firebase Storage bucket unavailable, continuing audit in memory.",
-        storageErr
-      );
-    }
-
+    // 4. Create Campaign record in Firestore (PNG is audited directly in memory via imageBase64)
     const campaignDoc = await collections.campaigns.add({
-      campaignName,
+      campaignName: safeCampaignName,
       styleGuideId,
-      subjectLine,
-      previewText,
-      bodyCopy,
-      pngStoragePath: savedStoragePath,
+      subjectLine: safeSubjectLine,
+      previewText: safePreviewText,
+      bodyCopy: safeBodyCopy,
+      pngFileName: imageFile.name,
       ownerUid: decodedUser?.uid ?? null,
       ownerEmail: decodedUser?.email ?? null,
       createdAt: new Date().toISOString(),
@@ -105,13 +132,13 @@ export async function POST(req: NextRequest) {
     // 5. Run the 3 isolated Gemini Auditors in parallel (Fastest total latency)
     const [copyAudit, inboxSimulation, visualAudit] = await Promise.all([
       runCopyAudit({
-        subjectLine,
-        previewText,
-        bodyCopy,
+        subjectLine: safeSubjectLine,
+        previewText: safePreviewText,
+        bodyCopy: safeBodyCopy,
         styleGuide,
         rubric: activeRubric,
       }),
-      runInboxSimulation(subjectLine, previewText, bodyCopy),
+      runInboxSimulation(safeSubjectLine, safePreviewText, safeBodyCopy),
       runVisualAudit({
         imageBase64,
         mimeType: imageFile.type as AllowedMimeType,
@@ -129,11 +156,18 @@ export async function POST(req: NextRequest) {
       rubric: activeRubric,
     });
 
+    const enrichedReport = {
+      ...finalReport,
+      campaignName: safeCampaignName,
+      styleGuideId,
+      ...(thumbnailDataUrl ? { thumbnailDataUrl } : {}),
+    };
+
     // 7. Save immutable report to Firestore with ownerUid & ownerEmail
-    const reportId = await saveAuditReport(finalReport, {
+    const reportId = await saveAuditReport(enrichedReport, {
       ownerUid: decodedUser?.uid,
       ownerEmail: decodedUser?.email,
-      campaignName,
+      campaignName: safeCampaignName,
       styleGuideId,
     });
 
@@ -141,7 +175,7 @@ export async function POST(req: NextRequest) {
       {
         reportId,
         campaignId: campaignDoc.id,
-        report: finalReport,
+        report: enrichedReport,
       },
       { status: 201 }
     );

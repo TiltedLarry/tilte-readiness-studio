@@ -8,7 +8,6 @@ import {
 } from "firebase-admin/app";
 import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
 import { getFirestore, type CollectionReference } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
 import type { NextRequest } from "next/server";
 import type { FinalAuditReport } from "@/lib/schemas/audit.schema";
 import type { StyleGuideProfile } from "@/lib/schemas/styleGuide.schema";
@@ -41,13 +40,9 @@ function getFirebaseAdminApp(): App {
   const projectId =
     process.env.FIREBASE_PROJECT_ID ??
     process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  const storageBucketName =
-    process.env.FIREBASE_STORAGE_BUCKET ??
-    process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
   const options: AppOptions = {};
   if (projectId) options.projectId = projectId;
-  if (storageBucketName) options.storageBucket = storageBucketName;
 
   const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -84,17 +79,6 @@ export const collections = {
     return db().collection("platform_config");
   },
 };
-
-export const storageBucket = new Proxy(
-  {} as ReturnType<ReturnType<typeof getStorage>["bucket"]>,
-  {
-    get(_target, prop) {
-      const bucket = getStorage(getFirebaseAdminApp()).bucket();
-      const value = Reflect.get(bucket, prop, bucket);
-      return typeof value === "function" ? value.bind(bucket) : value;
-    },
-  }
-);
 
 export async function verifyBearerToken(
   req: NextRequest

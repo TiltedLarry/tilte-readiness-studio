@@ -7,6 +7,12 @@ import {
 } from "@/lib/ai/geminiClient";
 import { collections, getStyleGuideById } from "@/lib/db/firebaseAdmin";
 import { FinalAuditReport } from "@/lib/schemas/audit.schema";
+import {
+  ANTI_INJECTION_SYSTEM_POLICY,
+  PromptInjectionError,
+  sanitizeUntrustedInput,
+  wrapUntrustedData,
+} from "@/lib/security/promptGuard";
 
 const ChatRequestSchema = z.object({
   reportId: z.string().min(1),
@@ -33,6 +39,26 @@ export async function POST(req: NextRequest) {
 
     const { reportId, styleGuideId, messages } = parsed.data;
 
+    let sanitizedMessages: Array<{ role: "user" | "model"; text: string }>;
+    try {
+      sanitizedMessages = messages.map((m) =>
+        m.role === "user"
+          ? {
+              role: "user",
+              text: wrapUntrustedData(
+                "user_question",
+                sanitizeUntrustedInput(m.text, "Chat Message", 2000)
+              ),
+            }
+          : m
+      );
+    } catch (secErr) {
+      if (secErr instanceof PromptInjectionError) {
+        return NextResponse.json({ error: secErr.message }, { status: 400 });
+      }
+      throw secErr;
+    }
+
     // 1. Load the exact saved report and style guide from Firestore
     const [reportDoc, styleGuide] = await Promise.all([
       collections.auditReports.doc(reportId).get(),
@@ -48,8 +74,10 @@ export async function POST(req: NextRequest) {
 
     const report = reportDoc.data() as FinalAuditReport;
 
-    // 2. Hard-lock the system prompt to these two JSON objects
+    // 2. Hard-lock the system prompt to these two JSON objects + anti-injection policy
     const systemInstruction = `
+${ANTI_INJECTION_SYSTEM_POLICY}
+
 You are the Email Campaign Readiness Assistant. You help campaign managers understand and fix issues flagged in their active Audit Report.
 
 STRICT BOUNDARIES:
@@ -66,7 +94,7 @@ ${JSON.stringify(report, null, 2)}
 `;
 
     // Format conversation history for Gemini
-    const formattedContents = messages.map((m) => ({
+    const formattedContents = sanitizedMessages.map((m) => ({
       role: m.role,
       parts: [{ text: m.text }],
     }));

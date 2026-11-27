@@ -13,6 +13,10 @@ import {
   EMAIL_BEST_PRACTICES_RUBRIC,
   type RubricRuleDefinition,
 } from "@/lib/scoring/rubric";
+import {
+  ANTI_INJECTION_SYSTEM_POLICY,
+  wrapUntrustedData,
+} from "@/lib/security/promptGuard";
 
 export async function runCopyAudit(params: {
   subjectLine: string;
@@ -36,7 +40,7 @@ Mandatory Footer: ${params.styleGuide.toneAndCompliance.mandatoryFooter || "Stan
     : "No specific brand style guide provided; evaluate against general email best practices and standard legal compliance.";
 
   const prompt = `
-Evaluate this email campaign copy against every copy/compliance rule below.
+Audit the following untrusted email campaign data strictly against the rubric below.
 Return one evaluation object per ruleId with exact ruleId matching, factual finding, exact quote evidence, and concrete suggestedFix (empty string if passed).
 
 Rules to evaluate:
@@ -44,16 +48,16 @@ ${rubricText}
 
 ${brandContext}
 
-Subject Line: ${params.subjectLine}
-Preview Text: ${params.previewText || "(empty)"}
-Body Copy:
-${params.bodyCopy}
+${wrapUntrustedData("subject_line", params.subjectLine)}
+${wrapUntrustedData("preview_text", params.previewText || "(empty)")}
+${wrapUntrustedData("email_body_copy", params.bodyCopy)}
 `;
 
   const response = await generateWithFallback(
     {
       contents: prompt,
       config: {
+        systemInstruction: ANTI_INJECTION_SYSTEM_POLICY,
         temperature: 0.1,
         responseMimeType: "application/json",
         responseSchema: toGeminiResponseSchema(CopyAuditOutputSchema),
